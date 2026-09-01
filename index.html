@@ -155,7 +155,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwZmq8wvvW5wkwBpydDoVJa
 
 let suppressOverlayClose = false;
 window.addEventListener('focus', ()=>{
-  if(suppressOverlayClose){ setTimeout(()=>{ suppressOverlayClose = false; }, 350); }
+  setTimeout(()=>{ suppressOverlayClose = false; }, 400);
 });
 
 const CATEGORY_META = {
@@ -302,7 +302,6 @@ function showToast(msg){
   showToast._t = setTimeout(()=> t.classList.remove('show'), 2400);
 }
 
-/* ===================== Google Sheets 資料同步層 ===================== */
 async function loadData(){
   try{
     const response = await fetch(API_URL);
@@ -1527,7 +1526,7 @@ function attachEvents(){
     fileInput.addEventListener('change', ()=>{
       handleFileInput(fileInput);
       suppressOverlayClose = true;
-      setTimeout(()=>{ suppressOverlayClose = false; }, 400);
+      setTimeout(()=>{ suppressOverlayClose = false; }, 600);
     });
   }
   const clearFileBtn = document.querySelector('[data-action="clear-file"]');
