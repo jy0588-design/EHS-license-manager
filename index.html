@@ -153,11 +153,6 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbwZmq8wvvW5wkwBpydDoVJaWqZyWHrwqqke7am2Wi5B66UXFcn3H7GhLi77KFwu0PC8/exec";
 /* ============================================================================================== */
 
-let suppressOverlayClose = false;
-window.addEventListener('focus', ()=>{
-  setTimeout(()=>{ suppressOverlayClose = false; }, 400);
-});
-
 const CATEGORY_META = {
   person: { label:'人員證照', tagClass:'tag-person' },
   equip:  { label:'設備證照', tagClass:'tag-equip' },
@@ -1382,7 +1377,7 @@ function renderModal(){
   const fileName = state.pendingFile ? state.pendingFile.name : data.fileName;
   return `
   <div class="overlay" id="overlay">
-    <div class="modal">
+    <div class="modal" id="modal-box">
       <div class="modal-head"><h3>${mode==='add' ? '新增證照' : '編輯證照'}</h3><button class="close-x" data-action="close-modal">×</button></div>
       <form id="cert-form">
         <div class="modal-body">
@@ -1500,13 +1495,17 @@ function attachEvents(){
   if(applyBtn) applyBtn.addEventListener('click', applyTransfer);
 
   const overlay = document.getElementById('overlay');
-  if(overlay){
-    overlay.addEventListener('mousedown', (e)=>{
-      if(suppressOverlayClose){ suppressOverlayClose = false; return; }
-      if(e.target === overlay) closeModal();
+  const modalBox = document.getElementById('modal-box');
+  if(overlay && modalBox){
+    overlay.addEventListener('click', (e)=>{
+      // 只有當點擊的位置確實是最外層的半透明背景（overlay），且不是點在視窗內部時才關閉
+      if(e.target === overlay){
+        closeModal();
+      }
     });
   }
   document.querySelectorAll('[data-action="close-modal"]').forEach(el=> el.addEventListener('click', closeModal));
+  
   const form = document.getElementById('cert-form');
   if(form){
     form.addEventListener('submit', submitModal);
@@ -1522,11 +1521,8 @@ function attachEvents(){
   }
   const fileInput = document.getElementById('file-input');
   if(fileInput){
-    fileInput.addEventListener('click', ()=>{ suppressOverlayClose = true; });
     fileInput.addEventListener('change', ()=>{
       handleFileInput(fileInput);
-      suppressOverlayClose = true;
-      setTimeout(()=>{ suppressOverlayClose = false; }, 600);
     });
   }
   const clearFileBtn = document.querySelector('[data-action="clear-file"]');
