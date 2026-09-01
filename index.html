@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>證照管理系統（雲端同步版）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #EEF1F2; --surface: #FFFFFF; --surface-2: #F5F6F7; --ink: #1B2027; --muted: #5B6470;
+    --border: #D9DCDD; --accent: #E8A33D; --accent-ink: #6B4400; --deep: #1F3A5F; --deep-ink: #EAF0F7;
+    --danger: #C1442D; --danger-bg: #FBE9E5; --critical: #C1442D; --critical-bg: #FBE9E5;
+    --warning: #B9770E; --warning-bg: #FCEFD9; --valid: #2F7D5D; --valid-bg: #E4F1EB;
+    --radius-s: 6px; --radius-m: 10px; --shadow: 0 1px 2px rgba(27,32,39,0.06), 0 4px 14px rgba(27,32,39,0.05);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans TC', system-ui, sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .mono{ font-family:'IBM Plex Mono', ui-monospace, monospace; letter-spacing:-0.01em; }
+  .app{ display:flex; min-height:100vh; }
+
+  .sidebar{ width:232px; flex:none; background:var(--deep); color:var(--deep-ink); padding:24px 16px; display:flex; flex-direction:column; gap:28px; }
+  .brand{ display:flex; flex-direction:column; gap:4px; padding:0 8px; }
+  .brand .mark{ width:34px; height:34px; border-radius:8px; background:var(--accent); color:#3A2600; display:flex; align-items:center; justify-content:center; font-family:'Archivo',sans-serif; font-weight:800; font-size:16px; margin-bottom:8px; }
+  .brand h1{ font-family:'Archivo',sans-serif; font-size:17px; font-weight:700; margin:0; line-height:1.3; }
+  .brand p{ margin:0; font-size:12px; color:#AFC1D6; }
+
+  .nav{ display:flex; flex-direction:column; gap:2px; }
+  .nav button{ all:unset; cursor:pointer; padding:10px 12px; border-radius:8px; font-size:13.5px; font-weight:500; color:#CBD9E8; display:flex; align-items:center; gap:10px; }
+  .nav button:hover{ background:rgba(255,255,255,0.06); color:#fff; }
+  .nav button.active{ background:rgba(232,163,61,0.16); color:#fff; font-weight:600; }
+  .nav button .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; opacity:0.5; flex:none; }
+
+  .sidebar-foot{ margin-top:auto; padding:0 8px; }
+  .sidebar-foot button{ all:unset; cursor:pointer; font-size:12px; color:#8FA3BA; }
+  .sidebar-foot button:hover{ color:#fff; text-decoration:underline; }
+
+  .main{ flex:1; min-width:0; padding:28px 36px 60px; }
+  .topbar{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+  .topbar h2{ font-family:'Archivo',sans-serif; font-size:22px; font-weight:700; margin:0 0 4px; }
+  .topbar .sub{ color:var(--muted); font-size:13px; }
+  .btn{ all:unset; cursor:pointer; box-sizing:border-box; padding:9px 16px; border-radius:8px; font-size:13.5px; font-weight:600; display:inline-flex; align-items:center; gap:6px; border:1px solid transparent; }
+  .btn-primary{ background:var(--deep); color:#fff; }
+  .btn-primary:hover{ background:#16304E; }
+  .btn-accent{ background:var(--accent); color:#3A2600; }
+  .btn-accent:hover{ filter:brightness(0.96); }
+  .btn-ghost{ background:var(--surface); border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ background:var(--surface-2); }
+  .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:6px; }
+  .btn[disabled]{ opacity:0.45; cursor:not-allowed; }
+
+  .cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-m); padding:16px 18px; box-shadow:var(--shadow); }
+  .card .num{ font-family:'Archivo',sans-serif; font-size:30px; font-weight:800; line-height:1; }
+  .card .lbl{ margin-top:6px; color:var(--muted); font-size:12.5px; }
+  .card.accent-critical .num{ color:var(--critical); }
+  .card.accent-warning .num{ color:var(--warning); }
+  .card.accent-valid .num{ color:var(--valid); }
+
+  .filters{ display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+  .filters input[type=text], .filters select{ font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--ink); }
+  .filters input[type=text]{ min-width:220px; }
+  .filters .spacer{ flex:1; }
+
+  .table-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-m); overflow-x:auto; box-shadow:var(--shadow); }
+  table{ width:100%; border-collapse:collapse; min-width:1180px; }
+  .table-wrap.compact table{ min-width:0; }
+  thead th{ text-align:left; font-size:12px; font-weight:600; color:var(--muted); padding:11px 14px; border-bottom:1px solid var(--border); background:var(--surface-2); white-space:nowrap; }
+  tbody td{ padding:12px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#FBFBFA; }
+  .cert-name{ font-weight:600; }
+  .cert-sub{ color:var(--muted); font-size:12px; margin-top:2px; }
+  .tag{ display:inline-flex; padding:2px 9px; border-radius:99px; font-size:11.5px; font-weight:600; }
+  .tag-person{ background:#E7ECF3; color:var(--deep); }
+  .tag-equip{ background:#EFE7F3; color:#5B2E7A; }
+  .tag-env{ background:#E1F0EA; color:#22694A; }
+  .tag-other{ background:#F0F0EC; color:#5B5B4F; }
+
+  .status{ display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:99px; font-size:12px; font-weight:700; }
+  .status .sw{ width:7px; height:7px; border-radius:50%; }
+  .status-valid{ background:var(--valid-bg); color:var(--valid); }
+  .status-valid .sw{ background:var(--valid); }
+  .status-warning{ background:var(--warning-bg); color:var(--warning); }
+  .status-warning .sw{ background:var(--warning); }
+  .status-critical{ background:var(--critical-bg); color:var(--critical); }
+  .status-critical .sw{ background:var(--critical); }
+  .status-expired{ background:#EDEDED; color:#6B6B6B; }
+  .status-expired .sw{ background:#8A8A8A; }
+
+  .ctrl-tag{ display:inline-flex; padding:3px 10px; border-radius:99px; font-size:11.5px; font-weight:700; }
+  .ctrl-yes{ background:#FDEBD3; color:#8A4B00; }
+  .ctrl-no{ background:#EFEFEC; color:#7A7A70; }
+
+  .group-row td{ background:var(--surface-2); font-weight:700; font-size:12.5px; color:var(--deep); padding:9px 14px; border-bottom:1px solid var(--border); }
+  .group-row .cnt{ font-weight:500; color:var(--muted); margin-left:8px; font-size:12px; }
+
+  .col-panel{ display:flex; flex-wrap:wrap; gap:10px 22px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:6px; }
+  .col-panel label{ display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; }
+
+  .icon-btn{ all:unset; cursor:pointer; padding:6px; border-radius:6px; color:var(--muted); display:inline-flex; }
+  .icon-btn:hover{ background:var(--surface-2); color:var(--ink); }
+  .row-actions{ display:flex; gap:2px; }
+  .file-chip{ display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); font-size:12px; cursor:pointer; color:var(--deep); }
+  .file-chip:hover{ background:#EEF2F6; }
+  .file-empty{ color:#B7BBBE; font-size:12px; }
+
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state .big{ font-family:'Archivo',sans-serif; font-size:16px; font-weight:700; color:var(--ink); margin-bottom:6px; }
+
+  .overlay{ position:fixed; inset:0; background:rgba(27,32,39,0.45); display:flex; align-items:flex-start; justify-content:center; padding:40px 20px; z-index:50; overflow-y:auto; }
+  .modal{ background:var(--surface); border-radius:14px; width:100%; max-width:640px; box-shadow:0 20px 60px rgba(0,0,0,0.25); overflow:hidden; }
+  .modal-head{ padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  .modal-head h3{ margin:0; font-family:'Archivo',sans-serif; font-size:17px; font-weight:700; }
+  .modal-body{ padding:22px 24px; display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; max-height:70vh; overflow-y:auto; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field.full{ grid-column:1 / -1; }
+  .field label{ font-size:12.5px; font-weight:600; color:var(--muted); }
+  .field label .req{ color:var(--danger); }
+  .field input, .field select, .field textarea{ font-family:inherit; font-size:13.5px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--ink); width:100%; }
+  .field textarea{ resize:vertical; min-height:60px; }
+  .filehint{ font-size:11.5px; color:var(--muted); }
+  .modal-foot{ padding:16px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+  .close-x{ all:unset; cursor:pointer; color:var(--muted); font-size:20px; line-height:1; padding:4px; }
+  .close-x:hover{ color:var(--ink); }
+
+  .fac-list{ display:flex; flex-direction:column; gap:8px; max-width:480px; }
+  .fac-row{ display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+  .fac-row .cnt{ color:var(--muted); font-size:12px; margin-left:8px; }
+  .add-fac{ display:flex; gap:8px; margin-top:14px; max-width:480px; }
+  .add-fac input{ flex:1; font-family:inherit; font-size:13.5px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; }
+
+  .dept-panel{ background:var(--surface-2); border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; padding:12px 14px 14px; margin:-8px 0 8px; max-width:480px; }
+  .dept-chip-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .dept-chip{ display:inline-flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:99px; padding:4px 6px 4px 10px; font-size:12px; }
+  .dept-chip button{ all:unset; cursor:pointer; color:var(--muted); font-weight:700; line-height:1; padding:0 4px; }
+
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:11px 18px; border-radius:9px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:99; opacity:0; transition:opacity .2s ease; pointer-events:none; }
+  .toast.show{ opacity:1; }
+
+  .loading-wrap{ display:flex; align-items:center; justify-content:center; min-height:60vh; color:var(--muted); font-size:13px; width:100%; flex-direction:column; gap:12px; }
+  .spinner{ width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="root" class="app"><div class="loading-wrap"><div class="spinner"></div>正在從雲端同步證照資料…</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* ===================== 請在此填入您的 Google Apps Script 網頁應用程式 URL ===================== */
+const API_URL = https://script.google.com/macros/s/AKfycbz34RAxerDtV_8xiaXud1fbdIQX-6Ibq9zu0Lss56hnbFTJTMoQUrQc06Z0gposAVfV/exec;
+/* ============================================================================================== */
+
+let suppressOverlayClose = false;
+window.addEventListener('focus', ()=>{
+  if(suppressOverlayClose){ setTimeout(()=>{ suppressOverlayClose = false; }, 350); }
+});
+
+const CATEGORY_META = {
+  person: { label:'人員證照', tagClass:'tag-person' },
+  equip:  { label:'設備證照', tagClass:'tag-equip' },
+  env:    { label:'環境許可', tagClass:'tag-env' },
+  other:  { label:'其他',     tagClass:'tag-other' },
+};
+const DEFAULT_FACILITIES = ['總公司','第一廠','第二廠'];
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+const ROLE_LABELS = { superAdmin:'總管理者', facilityManager:'廠區管理者', user:'一般使用者' };
+const STAGE_LABELS = { stage1:'第一階段', stage2:'第二階段', stage3:'第三階段' };
+const ROLE_CAPS = {
+  superAdmin:      { edit:true,  manageFacilities:true,  transfer:true,  reset:true,  managePermissions:true,  viewSensitive:true, downloadFiles:true, notify:true,  manageNotifications:true },
+  facilityManager: { edit:false, manageFacilities:false, transfer:false, reset:false, managePermissions:false, viewSensitive:true, downloadFiles:true, notify:true,  manageNotifications:false },
+  user:            { edit:false, manageFacilities:false, transfer:false, reset:false, managePermissions:false, viewSensitive:false, downloadFiles:false, notify:false, manageNotifications:false },
+};
+function can(cap){ return !!(state.currentRole && ROLE_CAPS[state.currentRole] && ROLE_CAPS[state.currentRole][cap]); }
+
+const COLUMN_DEFS = [
+  { key:'name',        label:'證照名稱',   always:true },
+  { key:'category',    label:'類別' },
+  { key:'holder',      label:'持有人/設備' },
+  { key:'department',  label:'部門' },
+  { key:'facility',    label:'所屬單位' },
+  { key:'idNumber',    label:'身份證字號' },
+  { key:'birthday',    label:'生日' },
+  { key:'authority',   label:'發證機關' },
+  { key:'certNo',      label:'證照字號' },
+  { key:'issueDate',   label:'發證日期' },
+  { key:'expiryDate',  label:'到期日' },
+  { key:'retrainDate', label:'回訓日期' },
+  { key:'retrainYears',label:'回訓年限' },
+  { key:'controlled',  label:'列管' },
+  { key:'status',      label:'狀態' },
+  { key:'notes',       label:'備註' },
+  { key:'fileLocation',label:'檔案存放位置' },
+  { key:'file',        label:'附件' },
+];
+
+let state = {
+  loaded: false,
+  saving: false,
+  currentRole: null,
+  currentFacility: null,
+  permissions: { superAdmin:'admin123', user:'' },
+  facilityManagerPasswords: {},
+  facilities: [...DEFAULT_FACILITIES],
+  fileLocations: [],
+  departmentsByFacility: {},
+  certNameOptions: [],
+  authorityOptions: [],
+  expandedFacilityDepts: new Set(),
+  notifySettings: {
+    stage1: { days: 90, emails: [''] },
+    stage2: { days: 60, emails: ['', ''] },
+    stage3: { days: 30, emails: ['', '', ''] },
+  },
+  showNotifiedStage: {},
+  manualNotify: { selected: new Set(), recipients:'', message:'' },
+  certs: [],
+  view: 'dashboard',
+  filters: { q:'', facility:'', category:'', status:'', controlled:'' },
+  sortBy: 'expiryDate',
+  groupBy: 'none',
+  showColumnPanel: false,
+  visibleColumns: new Set(COLUMN_DEFS.filter(c=>!c.always).map(c=>c.key)),
+  modal: null,
+  pendingFile: null,
+  transferSelected: new Set(),
+  transferQuery: '',
+  transferTarget: { facility:'', department:'' }
+};
+
+function uid(){ return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr + 'T00:00:00');
+  return Math.round((target - today) / 86400000);
+}
+
+function getStatus(dateStr){
+  const d = daysUntil(dateStr);
+  if(d === null) return { key:'valid', label:'有效', days:null };
+  if(d < 0) return { key:'expired', label:'已過期 ' + Math.abs(d) + ' 天', days:d };
+  if(d <= 30) return { key:'critical', label:'剩 ' + d + ' 天', days:d };
+  if(d <= 90) return { key:'warning', label:'剩 ' + d + ' 天', days:d };
+  return { key:'valid', label:'有效', days:d };
+}
+
+function fmtDate(s){ return s || '—'; }
+
+function recalcExpiryDate(form){
+  const yearsField = form.elements['retrainYears'];
+  const yearsVal = parseFloat(yearsField ? yearsField.value : '');
+  if(isNaN(yearsVal) || yearsVal <= 0) return;
+  const refStr = form.elements['retrainDate'].value || form.elements['issueDate'].value;
+  if(!refStr) return;
+  const ref = new Date(refStr + 'T00:00:00');
+  if(isNaN(ref.getTime())) return;
+  const totalMonths = Math.round(yearsVal * 12);
+  const newDate = new Date(ref.getFullYear(), ref.getMonth() + totalMonths, ref.getDate());
+  form.elements['expiryDate'].value = newDate.toISOString().slice(0,10);
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderComboField(name, label, options, currentValue, opts={}){
+  const val = currentValue || '';
+  const isCustom = val !== '' && !options.includes(val);
+  return `
+    <div class="field${opts.full ? ' full' : ''}">
+      <label>${label}${opts.required ? ' <span class="req">*</span>' : ''}</label>
+      <select name="${name}" data-combo="${name}">
+        <option value="">未選擇</option>
+        ${options.map(o=>`<option value="${escapeHtml(o)}" ${(!isCustom && val===o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}
+        <option value="__other__" ${isCustom ? 'selected' : ''}>其他（自行輸入）</option>
+      </select>
+      <input type="text" name="${name}Other" data-combo-other="${name}" style="margin-top:6px;${isCustom?'':'display:none;'}" placeholder="${opts.placeholder || '請輸入名稱'}" value="${isCustom ? escapeHtml(val) : ''}">
+    </div>
+  `;
+}
+
+function resolveComboValue(form, name){
+  const select = form.elements[name];
+  if(!select) return '';
+  if(select.value === '__other__'){
+    const other = form.elements[name + 'Other'];
+    return other ? other.value.trim() : '';
+  }
+  return select.value;
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=> t.classList.remove('show'), 2400);
+}
+
+/* ===================== Google Sheets 資料同步層 ===================== */
+async function loadData(){
+  try{
+    const response = await fetch(API_URL);
+    const res = await response.json();
+    if(res && res.certs){
+      state.certs = res.certs || [];
+      const cfg = res.config || {};
+      state.facilities = cfg.facilities && cfg.facilities.length ? cfg.facilities : [...DEFAULT_FACILITIES];
+      state.fileLocations = cfg.fileLocations || [];
+      state.facilityManagerPasswords = cfg.facilityManagerPasswords || {};
+      state.departmentsByFacility = cfg.departmentsByFacility || {};
+      state.certNameOptions = cfg.certNameOptions || [];
+      state.authorityOptions = cfg.authorityOptions || [];
+      if(cfg.permissions) state.permissions = { ...state.permissions, ...cfg.permissions };
+      if(cfg.notifySettings){
+        state.notifySettings = {
+          stage1: { days: cfg.notifySettings.stage1?.days ?? 90, emails: cfg.notifySettings.stage1?.emails || [''] },
+          stage2: { days: cfg.notifySettings.stage2?.days ?? 60, emails: cfg.notifySettings.stage2?.emails || ['',''] },
+          stage3: { days: cfg.notifySettings.stage3?.days ?? 30, emails: cfg.notifySettings.stage3?.emails || ['','',''] },
+        };
+      }
+    }
+  }catch(e){
+    console.error('從雲端載入失敗', e);
+    showToast('連線雲端失敗，請檢查網路或 API 設定');
+  }
+  state.loaded = true;
+  render();
+}
+
+async function persist(){
+  try{
+    state.saving = true;
+    showToast('正在同步至雲端…');
+    const payload = {
+      certs: state.certs,
+      config: {
+        facilities: state.facilities,
+        fileLocations: state.fileLocations,
+        facilityManagerPasswords: state.facilityManagerPasswords,
+        departmentsByFacility: state.departmentsByFacility,
+        certNameOptions: state.certNameOptions,
+        authorityOptions: state.authorityOptions,
+        permissions: state.permissions,
+        notifySettings: state.notifySettings
+      }
+    };
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if(!result || result.status !== 'success'){
+      showToast('雲端同步失敗，請重試');
+    } else {
+      showToast('已成功同步至雲端試算表');
+    }
+  }catch(e){
+    console.error('同步發生錯誤', e);
+    showToast('同步發生錯誤，請檢查網路');
+  }finally{
+    state.saving = false;
+  }
+}
+
+async function resetAll(){
+  if(!can('reset')) return;
+  if(!confirm('確定要清除所有證照資料嗎？此操作會直接影響雲端試算表。')) return;
+  state.facilities = [...DEFAULT_FACILITIES];
+  state.fileLocations = [];
+  state.facilityManagerPasswords = {};
+  state.departmentsByFacility = {};
+  state.certNameOptions = [];
+  state.authorityOptions = [];
+  state.expandedFacilityDepts = new Set();
+  state.notifySettings = {
+    stage1: { days: 90, emails: [''] },
+    stage2: { days: 60, emails: ['', ''] },
+    stage3: { days: 30, emails: ['', '', ''] },
+  };
+  state.showNotifiedStage = {};
+  state.manualNotify = { selected: new Set(), recipients:'', message:'' };
+  state.certs = [];
+  render();
+  await persist();
+  showToast('已清空所有資料');
+}
+
+const VIEW_CAPS = { transfer:'transfer', facilities:'manageFacilities', permissions:'managePermissions', notify:'notify' };
+function setView(v){
+  if(VIEW_CAPS[v] && !can(VIEW_CAPS[v])) return;
+  state.view = v;
+  state.filters = { q:'', facility:'', category:'', status:'', controlled:'' };
+  render();
+}
+
+function logout(){
+  state.currentRole = null;
+  state.currentFacility = null;
+  state.view = 'dashboard';
+  render();
+}
+
+function openAddModal(){
+  if(!can('edit')) return;
+  state.pendingFile = null;
+  state.modal = { mode:'add', data:{
+    id:null, name:'', category:'person', holder:'', department:'', facility: state.facilities[0] || '',
+    idNumber:'', birthday:'', authority:'', certNo:'', issueDate:'', expiryDate:'', retrainDate:'', retrainYears:'', controlled:'no', notes:'', fileLocation:'',
+    fileName:'', fileType:'', fileData:''
+  }};
+  render();
+}
+
+function openEditModal(id){
+  if(!can('edit')) return;
+  const c = state.certs.find(x=>x.id===id);
+  if(!c) return;
+  state.pendingFile = null;
+  state.modal = { mode:'edit', data: {...c} };
+  render();
+}
+
+function closeModal(){ state.modal = null; state.pendingFile = null; render(); }
+
+async function handleFileInput(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  if(file.size > MAX_FILE_BYTES){
+    showToast('檔案過大（上限 4MB），請壓縮後再上傳');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.pendingFile = { name: file.name, type: file.type, dataUrl: reader.result };
+    render();
+  };
+  reader.onerror = () => showToast('讀取檔案失敗，請重試');
+  reader.readAsDataURL(file);
+}
+
+function clearPendingFile(){
+  state.pendingFile = null;
+  if(state.modal){ state.modal.data.fileName=''; state.modal.data.fileType=''; state.modal.data.fileData=''; }
+  render();
+}
+
+async function submitModal(ev){
+  ev.preventDefault();
+  if(!can('edit')) return;
+  const form = ev.target;
+  const data = state.modal.data;
+  const record = {
+    id: data.id || uid(),
+    name: resolveComboValue(form, 'name'),
+    category: form.category.value,
+    holder: form.holder.value.trim(),
+    department: resolveComboValue(form, 'department'),
+    facility: form.facility.value,
+    idNumber: form.idNumber.value.trim(),
+    birthday: form.birthday.value,
+    authority: resolveComboValue(form, 'authority'),
+    certNo: form.certNo.value.trim(),
+    issueDate: form.issueDate.value,
+    expiryDate: form.expiryDate.value,
+    retrainDate: form.retrainDate.value,
+    retrainYears: form.retrainYears.value.trim(),
+    controlled: form.controlled.value,
+    notes: form.notes.value.trim(),
+    fileLocation: form.fileLocation.value,
+    notifiedStages: data.notifiedStages || {},
+    fileName: data.fileName || '',
+    fileType: data.fileType || '',
+    fileData: data.fileData || '',
+  };
+  if(!record.name || !record.expiryDate){
+    showToast('請填寫證照名稱與到期日');
+    return;
+  }
+  if(state.pendingFile){
+    record.fileName = state.pendingFile.name;
+    record.fileType = state.pendingFile.type;
+    record.fileData = state.pendingFile.dataUrl;
+  }
+  ensureInList(state.certNameOptions, record.name);
+  ensureInList(state.authorityOptions, record.authority);
+  if(record.department){
+    if(!state.departmentsByFacility[record.facility]) state.departmentsByFacility[record.facility] = [];
+    ensureInList(state.departmentsByFacility[record.facility], record.department);
+  }
+  if(data.id && data.expiryDate && record.expiryDate !== data.expiryDate){
+    record.notifiedStages = {};
+  }
+  const idx = state.certs.findIndex(c=>c.id===record.id);
+  if(idx >= 0) state.certs[idx] = record; else state.certs.push(record);
+  state.modal = null;
+  state.pendingFile = null;
+  render();
+  await persist();
+}
+
+async function deleteCert(id){
+  if(!can('edit')) return;
+  const c = state.certs.find(x=>x.id===id);
+  if(!c) return;
+  if(!confirm('確定要刪除「' + c.name + '」的紀錄嗎？')) return;
+  state.certs = state.certs.filter(x=>x.id!==id);
+  render();
+  await persist();
+}
+
+function viewAttachment(id){
+  if(!can('downloadFiles')) return;
+  const c = state.certs.find(x=>x.id===id);
+  if(!c || !c.fileData) return;
+  const a = document.createElement('a');
+  a.href = c.fileData; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+function downloadAttachment(id){
+  if(!can('downloadFiles')) return;
+  const c = state.certs.find(x=>x.id===id);
+  if(!c || !c.fileData) return;
+  const a = document.createElement('a');
+  a.href = c.fileData; a.download = c.fileName || (c.name + '.file');
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function addFacility(input){
+  if(!can('manageFacilities')) return;
+  const name = input.value.trim();
+  if(!name) return;
+  if(state.facilities.includes(name)){ showToast('此單位已存在'); return; }
+  state.facilities.push(name);
+  input.value = '';
+  render();
+  await persist();
+}
+
+async function setFacilityManagerPassword(facility){
+  if(!can('manageFacilities')) return;
+  const current = state.facilityManagerPasswords[facility] || '';
+  const pw = prompt('設定「' + facility + '」廠區管理者的登入密碼', current);
+  if(pw === null) return;
+  state.facilityManagerPasswords[facility] = pw.trim();
+  render();
+  await persist();
+}
+
+function toggleFacilityDeptPanel(name){
+  if(state.expandedFacilityDepts.has(name)) state.expandedFacilityDepts.delete(name);
+  else state.expandedFacilityDepts.add(name);
+  render();
+}
+
+async function addDepartment(facility, input){
+  if(!can('manageFacilities')) return;
+  const name = input.value.trim();
+  if(!name) return;
+  if(!state.departmentsByFacility[facility]) state.departmentsByFacility[facility] = [];
+  if(state.departmentsByFacility[facility].includes(name)){ showToast('此部門已存在'); return; }
+  state.departmentsByFacility[facility].push(name);
+  input.value = '';
+  render();
+  await persist();
+}
+
+async function removeDepartment(facility, dept){
+  if(!can('manageFacilities')) return;
+  const inUse = state.certs.some(c=>c.facility===facility && c.department===dept);
+  if(inUse){ showToast('此部門仍有證照使用中，無法刪除'); return; }
+  state.departmentsByFacility[facility] = (state.departmentsByFacility[facility]||[]).filter(d=>d!==dept);
+  render();
+  await persist();
+}
+
+const MANAGED_LISTS = {
+  fileLocations:   { stateKey:'fileLocations',   certField:'fileLocation', placeholder:'例如：總務處檔案室' },
+  certNameOptions: { stateKey:'certNameOptions', certField:'name',         placeholder:'例如：甲級職業安全衛生管理員' },
+  authorityOptions:{ stateKey:'authorityOptions',certField:'authority',    placeholder:'例如：勞動部' },
+};
+
+async function addManagedListItem(listKey, input){
+  if(!can('manageFacilities')) return;
+  const cfg = MANAGED_LISTS[listKey];
+  const name = input.value.trim();
+  if(!name) return;
+  if(state[cfg.stateKey].includes(name)){ showToast('已存在相同項目'); return; }
+  state[cfg.stateKey].push(name);
+  input.value = '';
+  render();
+  await persist();
+}
+
+async function removeManagedListItem(listKey, name){
+  if(!can('manageFacilities')) return;
+  const cfg = MANAGED_LISTS[listKey];
+  const inUse = state.certs.some(c => c[cfg.certField] === name);
+  if(inUse){ showToast('此項目仍有證照使用中，無法刪除'); return; }
+  if(!confirm('確定要刪除「' + name + '」嗎？')) return;
+  state[cfg.stateKey] = state[cfg.stateKey].filter(n=>n!==name);
+  render();
+  await persist();
+}
+
+async function renameManagedListItem(listKey, oldName){
+  if(!can('manageFacilities')) return;
+  const cfg = MANAGED_LISTS[listKey];
+  const newName = prompt('請輸入「' + oldName + '」的新名稱', oldName);
+  if(newName === null) return;
+  const trimmed = newName.trim();
+  if(!trimmed){ showToast('名稱不可為空'); return; }
+  if(trimmed === oldName) return;
+  if(state[cfg.stateKey].includes(trimmed)){ showToast('已有相同名稱'); return; }
+  state[cfg.stateKey] = state[cfg.stateKey].map(n => n === oldName ? trimmed : n);
+  state.certs.forEach(c=>{ if(c[cfg.certField] === oldName) c[cfg.certField] = trimmed; });
+  render();
+  await persist();
+}
+
+function ensureInList(list, value){
+  if(value && !list.includes(value)) list.push(value);
+}
+
+async function removeFacility(name){
+  if(!can('manageFacilities')) return;
+  const inUse = state.certs.some(c=>c.facility===name);
+  if(inUse){ showToast('此單位仍有證照使用中，無法刪除'); return; }
+  if(!confirm('確定要刪除單位「' + name + '」嗎？')) return;
+  state.facilities = state.facilities.filter(f=>f!==name);
+  delete state.facilityManagerPasswords[name];
+  delete state.departmentsByFacility[name];
+  render();
+  await persist();
+}
+
+function toggleTransferPerson(key){
+  if(!can('transfer')) return;
+  if(state.transferSelected.has(key)) state.transferSelected.delete(key);
+  else state.transferSelected.add(key);
+  render();
+}
+
+function selectAllTransfer(){
+  if(!can('transfer')) return;
+  const q = state.transferQuery.toLowerCase();
+  uniquePersons()
+    .filter(p => !q || (p.name+p.department+p.facility+p.idNumber).toLowerCase().includes(q))
+    .forEach(p => state.transferSelected.add(p.key));
+  render();
+}
+
+function clearTransferSelection(){
+  if(!can('transfer')) return;
+  state.transferSelected = new Set();
+  render();
+}
+
+async function applyTransfer(){
+  if(!can('transfer')) return;
+  const facility = state.transferTarget.facility;
+  const department = state.transferTarget.department.trim();
+  if(!facility && !department){ showToast('請至少設定新的廠區或部門'); return; }
+  const count = state.transferSelected.size;
+  if(count === 0) return;
+  if(!confirm('確定要將所選 ' + count + ' 位人員的證照進行異動嗎？')) return;
+  state.certs.forEach(c=>{
+    if(c.category !== 'person') return;
+    if(state.transferSelected.has(personKey(c))){
+      if(facility) c.facility = facility;
+      if(department) c.department = department;
+    }
+  });
+  if(department && facility){
+    if(!state.departmentsByFacility[facility]) state.departmentsByFacility[facility] = [];
+    ensureInList(state.departmentsByFacility[facility], department);
+  }
+  state.transferSelected = new Set();
+  state.transferTarget = { facility:'', department:'' };
+  render();
+  await persist();
+}
+
+function updateFilter(key, val){ state.filters[key] = val; render(); }
+
+async function savePermissions(form){
+  if(!can('managePermissions')) return;
+  state.permissions = { superAdmin: form.superAdmin.value, user: form.user.value };
+  render();
+  await persist();
+  showToast('已更新權限設定');
+}
+
+function csvValue(c, key){
+  switch(key){
+    case 'name': return c.name;
+    case 'category': return CATEGORY_META[c.category]?.label || c.category;
+    case 'holder': return c.holder;
+    case 'department': return c.department;
+    case 'facility': return c.facility;
+    case 'idNumber': return c.idNumber;
+    case 'birthday': return c.birthday;
+    case 'authority': return c.authority;
+    case 'certNo': return c.certNo;
+    case 'issueDate': return c.issueDate;
+    case 'expiryDate': return c.expiryDate;
+    case 'retrainDate': return c.retrainDate;
+    case 'retrainYears': return c.retrainYears;
+    case 'controlled': return c.controlled==='yes' ? '列管' : '不列管';
+    case 'status': return getStatus(c.expiryDate).label;
+    case 'notes': return c.notes;
+    case 'fileLocation': return c.fileLocation;
+    case 'file': return c.fileData ? '有附件' : '無附件';
+    default: return '';
+  }
+}
+
+function exportCsv(){
+  const cols = visibleColumnDefs();
+  const rows = [cols.map(cd=>cd.label)];
+  getFilteredCerts().forEach(c=>{ rows.push(cols.map(cd => csvValue(c, cd.key))); });
+  const csv = rows.map(r => r.map(v => '"' + String(v??'').replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = '證照清單_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function compareCerts(a,b){
+  switch(state.sortBy){
+    case 'name': return (a.name||'').localeCompare(b.name||'','zh-Hant');
+    case 'facility': return (a.facility||'').localeCompare(b.facility||'','zh-Hant') || (a.expiryDate||'').localeCompare(b.expiryDate||'');
+    case 'department': return (a.department||'').localeCompare(b.department||'','zh-Hant') || (a.expiryDate||'').localeCompare(b.expiryDate||'');
+    case 'status': {
+      const order = { expired:0, critical:1, warning:2, valid:3 };
+      const sa = getStatus(a.expiryDate).key, sb = getStatus(b.expiryDate).key;
+      return (order[sa]-order[sb]) || (a.expiryDate||'').localeCompare(b.expiryDate||'');
+    }
+    default: return (a.expiryDate||'').localeCompare(b.expiryDate||'');
+  }
+}
+
+function scopedCerts(){
+  if(state.currentRole === 'facilityManager' && state.currentFacility){
+    return state.certs.filter(c => c.category !== 'person' || c.facility === state.currentFacility);
+  }
+  return state.certs;
+}
+
+function getFilteredCerts(){
+  const { q, facility, category, status, controlled } = state.filters;
+  return scopedCerts().filter(c=>{
+    if(facility && c.facility !== facility) return false;
+    if(category && c.category !== category) return false;
+    if(controlled && (c.controlled||'no') !== controlled) return false;
+    if(status){
+      const st = getStatus(c.expiryDate).key;
+      if(status !== st) return false;
+    }
+    if(q){
+      const parts = [c.name,c.holder,c.certNo,c.authority,c.department];
+      if(can('viewSensitive')) parts.push(c.idNumber);
+      const hay = parts.join(' ').toLowerCase();
+      if(!hay.includes(q.toLowerCase())) return false;
+    }
+    return true;
+  }).sort(compareCerts);
+}
+
+function groupedByField(list, field){
+  const map = new Map();
+  list.forEach(c=>{
+    const raw = (c[field] || '').trim();
+    const key = raw || (field==='facility' ? '未設定單位' : '未命名證照');
+    if(!map.has(key)) map.set(key, []);
+    map.get(key).push(c);
+  });
+  return Array.from(map.entries()).sort((a,b)=> a[0].localeCompare(b[0],'zh-Hant'));
+}
+
+function isColAllowed(key){
+  if((key==='idNumber' || key==='birthday') && !can('viewSensitive')) return false;
+  return true;
+}
+
+function visibleColumnDefs(){
+  return COLUMN_DEFS.filter(cd => (cd.always || state.visibleColumns.has(cd.key)) && isColAllowed(cd.key));
+}
+
+function toggleColumn(key){
+  if(state.visibleColumns.has(key)) state.visibleColumns.delete(key);
+  else state.visibleColumns.add(key);
+  render();
+}
+
+function cellContent(c, key){
+  switch(key){
+    case 'category': { const cat = CATEGORY_META[c.category] || CATEGORY_META.other; return `<span class="tag ${cat.tagClass}">${cat.label}</span>`; }
+    case 'holder': return escapeHtml(c.holder||'—');
+    case 'department': return escapeHtml(c.department||'—');
+    case 'facility': return escapeHtml(c.facility||'—');
+    case 'idNumber': return `<span class="mono">${escapeHtml(c.idNumber||'—')}</span>`;
+    case 'birthday': return `<span class="mono">${fmtDate(c.birthday)}</span>`;
+    case 'authority': return escapeHtml(c.authority||'—');
+    case 'certNo': return c.certNo ? `<span class="mono">${escapeHtml(c.certNo)}</span>` : '—';
+    case 'issueDate': return `<span class="mono">${fmtDate(c.issueDate)}</span>`;
+    case 'expiryDate': return `<span class="mono">${fmtDate(c.expiryDate)}</span>`;
+    case 'retrainDate': return `<span class="mono">${fmtDate(c.retrainDate)}</span>`;
+    case 'retrainYears': return c.retrainYears ? (escapeHtml(c.retrainYears) + ' 年') : '—';
+    case 'controlled': return `<span class="ctrl-tag ${c.controlled==='yes'?'ctrl-yes':'ctrl-no'}">${c.controlled==='yes'?'列管':'不列管'}</span>`;
+    case 'status': { const st = getStatus(c.expiryDate); return `<span class="status status-${st.key}"><span class="sw"></span>${st.label}</span>`; }
+    case 'notes': return c.notes ? escapeHtml(c.notes) : '—';
+    case 'fileLocation': return c.fileLocation ? escapeHtml(c.fileLocation) : '—';
+    case 'file': return fileCell(c);
+    default: return '—';
+  }
+}
+
+function getStats(){
+  const list = scopedCerts();
+  const total = list.length;
+  let expired=0, critical=0, warning=0, valid=0;
+  list.forEach(c=>{
+    const s = getStatus(c.expiryDate).key;
+    if(s==='expired') expired++;
+    else if(s==='critical') critical++;
+    else if(s==='warning') warning++;
+    else valid++;
+  });
+  return { total, expired, critical, warning, valid, needsAttention: expired+critical+warning };
+}
+
+function personKey(c){
+  const id = (c.idNumber||'').trim();
+  if(id) return 'ID:' + id;
+  return 'NAME:' + (c.holder||'').trim();
+}
+
+function allDepartmentsUnion(){
+  const set = new Set();
+  Object.values(state.departmentsByFacility).forEach(arr => (arr||[]).forEach(d=>set.add(d)));
+  return Array.from(set).sort((a,b)=> a.localeCompare(b,'zh-Hant'));
+}
+
+function getNotifyStage(c){
+  const days = daysUntil(c.expiryDate);
+  if(days === null) return null;
+  const s1 = state.notifySettings.stage1.days;
+  const s2 = state.notifySettings.stage2.days;
+  const s3 = state.notifySettings.stage3.days;
+  if(days <= s3) return 'stage3';
+  if(days <= s2) return 'stage2';
+  if(days <= s1) return 'stage1';
+  return null;
+}
+
+function pendingForStage(stageKey){
+  return scopedCerts().filter(c => getNotifyStage(c) === stageKey && !(c.notifiedStages && c.notifiedStages[stageKey]));
+}
+
+function notifiedForStage(stageKey){
+  return scopedCerts().filter(c => getNotifyStage(c) === stageKey && c.notifiedStages && c.notifiedStages[stageKey]);
+}
+
+async function saveNotifySettings(form){
+  if(!can('manageNotifications')) return;
+  state.notifySettings = {
+    stage1: { days: parseInt(form.elements['stage1Days'].value,10) || 0, emails: [form.elements['stage1Email0'].value.trim()] },
+    stage2: { days: parseInt(form.elements['stage2Days'].value,10) || 0, emails: [form.elements['stage2Email0'].value.trim(), form.elements['stage2Email1'].value.trim()] },
+    stage3: { days: parseInt(form.elements['stage3Days'].value,10) || 0, emails: [form.elements['stage3Email0'].value.trim(), form.elements['stage3Email1'].value.trim(), form.elements['stage3Email2'].value.trim()] },
+  };
+  render();
+  await persist();
+  showToast('已更新通知設定');
+}
+
+function buildCertListText(list){
+  return list.map(c=>{
+    const d = daysUntil(c.expiryDate);
+    return '・' + c.name + '｜' + (c.facility||'—') + '｜' + (c.holder||'—') + '｜到期日：' + c.expiryDate + '｜剩餘 ' + d + ' 天';
+  }).join('\n');
+}
+
+async function sendStageNotification(stageKey){
+  if(!can('notify')) return;
+  const cfg = state.notifySettings[stageKey];
+  const recipients = (cfg.emails||[]).map(e=>e.trim()).filter(Boolean);
+  if(!recipients.length){ showToast('此階段尚未設定收件人'); return; }
+  const list = pendingForStage(stageKey);
+  if(!list.length){ showToast('此階段目前沒有待通知的證照'); return; }
+  const subject = '【證照到期提醒】' + STAGE_LABELS[stageKey] + '（剩餘 ' + cfg.days + ' 天內到期）';
+  const body = '以下證照即將到期，請儘速安排回訓／換發：\n\n' + buildCertListText(list);
+  window.location.href = 'mailto:' + encodeURIComponent(recipients.join(',')).replace(/%2C/g,',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  list.forEach(c=>{ if(!c.notifiedStages) c.notifiedStages = {}; c.notifiedStages[stageKey] = true; });
+  render();
+  await persist();
+}
+
+async function resetNotifiedFlag(certId, stageKey){
+  if(!can('notify')) return;
+  const c = state.certs.find(x=>x.id===certId);
+  if(!c || !c.notifiedStages) return;
+  delete c.notifiedStages[stageKey];
+  render();
+  await persist();
+}
+
+function toggleManualSelect(id){
+  if(state.manualNotify.selected.has(id)) state.manualNotify.selected.delete(id);
+  else state.manualNotify.selected.add(id);
+  render();
+}
+
+function sendManualNotification(){
+  if(!can('notify')) return;
+  const recipients = state.manualNotify.recipients.split(/[,;\n]/).map(s=>s.trim()).filter(Boolean);
+  if(!recipients.length){ showToast('請輸入至少一位收件人 Email'); return; }
+  const selectedCerts = scopedCerts().filter(c=> state.manualNotify.selected.has(c.id));
+  if(!selectedCerts.length){ showToast('請至少勾選一筆證照'); return; }
+  const subject = '【證照通知】證照到期提醒';
+  const customMsg = state.manualNotify.message.trim();
+  const body = (customMsg ? customMsg + '\n\n' : '') + buildCertListText(selectedCerts);
+  window.location.href = 'mailto:' + encodeURIComponent(recipients.join(',')).replace(/%2C/g,',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+
+function uniquePersons(){
+  const map = new Map();
+  state.certs.forEach(c=>{
+    if(c.category !== 'person') return;
+    const name = (c.holder||'').trim();
+    if(!name) return;
+    const key = personKey(c);
+    if(!map.has(key)){
+      map.set(key, { key, name, idNumber:c.idNumber||'', department:c.department||'', facility:c.facility||'', count:0 });
+    }
+    const rec = map.get(key);
+    rec.count++;
+    if(!rec.department && c.department) rec.department = c.department;
+    if(!rec.facility && c.facility) rec.facility = c.facility;
+    if(!rec.idNumber && c.idNumber) rec.idNumber = c.idNumber;
+  });
+  return Array.from(map.values()).sort((a,b)=> a.name.localeCompare(b.name,'zh-Hant'));
+}
+
+function render(){
+  const root = document.getElementById('root');
+  if(!state.loaded){ root.innerHTML = '<div class="loading-wrap"><div class="spinner"></div>正在從雲端同步證照資料…</div>'; return; }
+
+  if(!state.currentRole){
+    root.innerHTML = renderLoginGate();
+    attachLoginEvents();
+    return;
+  }
+
+  root.innerHTML = `
+    ${renderSidebar()}
+    <div class="main">
+      ${state.view==='dashboard' ? renderDashboard() : ''}
+      ${state.view==='certs' ? renderCertsView() : ''}
+      ${state.view==='transfer' && can('transfer') ? renderTransferView() : ''}
+      ${state.view==='notify' && can('notify') ? renderNotifyView() : ''}
+      ${state.view==='facilities' && can('manageFacilities') ? renderFacilitiesView() : ''}
+      ${state.view==='permissions' && can('managePermissions') ? renderPermissionsView() : ''}
+    </div>
+    ${state.modal ? renderModal() : ''}
+  `;
+  attachEvents();
+}
+
+function renderLoginGate(){
+  return `
+  <div style="display:flex; align-items:center; justify-content:center; min-height:100vh; width:100%; padding:20px;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:32px 30px; width:100%; max-width:380px; box-shadow:var(--shadow);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <div style="width:34px;height:34px;border-radius:8px;background:var(--accent);color:#3A2600;display:flex;align-items:center;justify-content:center;font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;">EHS</div>
+        <div style="font-family:'Archivo',sans-serif; font-weight:700; font-size:17px;">證照管理系統</div>
+      </div>
+      <div style="color:var(--muted); font-size:12.5px; margin-bottom:20px;">請選擇身份登入（雲端同步版）</div>
+      <form id="login-form">
+        <div class="field" style="margin-bottom:12px;">
+          <label>身份別</label>
+          <select name="role" id="login-role">
+            <option value="user">一般使用者（僅查詢）</option>
+            <option value="facilityManager">廠區管理者（僅查詢所屬廠區）</option>
+            <option value="superAdmin">總管理者（完整功能）</option>
+          </select>
+        </div>
+        <div class="field" id="login-facility-field" style="margin-bottom:12px; display:none;">
+          <label>所屬廠區 / 單位</label>
+          <select name="facility" id="login-facility">
+            ${state.facilities.map(f=>`<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:6px;">
+          <label>密碼</label>
+          <input type="password" name="password" id="login-password">
+        </div>
+        <div id="login-error" style="color:var(--danger); font-size:12px; margin-bottom:12px; display:none;"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:6px;">登入</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function attemptLogin(role, password, facility){
+  let expected;
+  if(role === 'facilityManager'){
+    if(!facility){ showLoginError('請選擇所屬廠區/單位'); return; }
+    expected = state.facilityManagerPasswords[facility] || '';
+  }else{
+    expected = state.permissions[role] || '';
+  }
+  if(expected !== '' && password !== expected){
+    showLoginError('密碼錯誤，請重新輸入');
+    return;
+  }
+  state.currentRole = role;
+  state.currentFacility = role === 'facilityManager' ? facility : null;
+  state.view = 'dashboard';
+  render();
+}
+
+function showLoginError(msg){
+  const err = document.getElementById('login-error');
+  if(err){ err.textContent = msg; err.style.display = 'block'; }
+}
+
+function currentIdentityLabel(){
+  if(state.currentRole === 'facilityManager' && state.currentFacility){
+    return ROLE_LABELS.facilityManager + '（' + state.currentFacility + '）';
+  }
+  return ROLE_LABELS[state.currentRole] || '';
+}
+
+function renderSidebar(){
+  const navAll = [
+    { key:'dashboard', label:'儀表板' },
+    { key:'certs', label:'證照清單' },
+    { key:'transfer', label:'人員異動', cap:'transfer' },
+    { key:'notify', label:'到期通知', cap:'notify' },
+    { key:'facilities', label:'單位管理', cap:'manageFacilities' },
+    { key:'permissions', label:'權限設定', cap:'managePermissions' },
+  ];
+  const nav = navAll.filter(n => !n.cap || can(n.cap));
+  return `
+  <div class="sidebar">
+    <div class="brand">
+      <div class="mark">EHS</div>
+      <h1>證照管理系統</h1>
+      <p>環境及職業安全衛生</p>
+    </div>
+    <div class="nav">
+      ${nav.map(n=>`<button data-nav="${n.key}" class="${state.view===n.key?'active':''}"><span class="dot"></span>${n.label}</button>`).join('')}
+    </div>
+    <div class="sidebar-foot" style="display:flex; flex-direction:column; gap:8px;">
+      <div style="font-size:11.5px; color:#8FA3BA;">目前身份：${currentIdentityLabel()}</div>
+      <button data-action="logout">登出 / 切換身份</button>
+      ${can('reset') ? `<button data-action="reset-all">清除所有資料</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderDashboard(){
+  const s = getStats();
+  const upcoming = scopedCerts()
+    .filter(c => ['expired','critical','warning'].includes(getStatus(c.expiryDate).key))
+    .sort((a,b)=> (a.expiryDate||'').localeCompare(b.expiryDate||''))
+    .slice(0,8);
+
+  return `
+    <div class="topbar">
+      <div>
+        <h2>儀表板</h2>
+        <div class="sub">總公司與各廠證照到期狀況總覽（雲端同步連線中）</div>
+      </div>
+      ${can('edit') ? `<button class="btn btn-accent" data-action="add-cert">＋ 新增證照</button>` : ''}
+    </div>
+    <div class="cards">
+      <div class="card"><div class="num">${s.total}</div><div class="lbl">證照總數</div></div>
+      <div class="card accent-valid"><div class="num">${s.valid}</div><div class="lbl">狀態正常</div></div>
+      <div class="card accent-warning"><div class="num">${s.warning + s.critical}</div><div class="lbl">90 天內到期</div></div>
+      <div class="card accent-critical"><div class="num">${s.expired}</div><div class="lbl">已過期</div></div>
+    </div>
+    <div class="table-wrap compact">
+      <table>
+        <thead><tr><th>證照名稱</th><th>類別</th><th>所屬單位</th><th>到期日</th><th>狀態</th><th>附件</th></tr></thead>
+        <tbody>
+          ${upcoming.length ? upcoming.map(rowHtml).join('') : `<tr><td colspan="6"><div class="empty-state">目前沒有需要留意的證照，狀態皆正常。</div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderCertsView(){
+  const list = getFilteredCerts();
+  const cols = visibleColumnDefs();
+  const colCount = cols.length + (can('edit') ? 1 : 0);
+
+  const bodyHtml = (() => {
+    if(!list.length) return `<tr><td colspan="${colCount}"><div class="empty-state"><div class="big">找不到符合條件的證照</div></div></td></tr>`;
+    if(state.groupBy === 'none') return list.map(rowHtmlFull).join('');
+    const field = state.groupBy === 'name' ? 'name' : 'facility';
+    return groupedByField(list, field).map(([groupName, items]) => `
+      <tr class="group-row"><td colspan="${colCount}">📁 ${escapeHtml(groupName)}<span class="cnt">${items.length} 筆</span></td></tr>
+      ${items.map(rowHtmlFull).join('')}
+    `).join('');
+  })();
+
+  return `
+    <div class="topbar">
+      <div>
+        <h2>證照清單</h2>
+        <div class="sub">共 ${scopedCerts().length} 筆紀錄，符合條件 ${list.length} 筆</div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-ghost" data-action="export-csv">匯出 CSV</button>
+        ${can('edit') ? `<button class="btn btn-accent" data-action="add-cert">＋ 新增證照</button>` : ''}
+      </div>
+    </div>
+    <div class="filters">
+      <input type="text" id="f-q" placeholder="搜尋名稱、持有人、字號…" value="${escapeHtml(state.filters.q)}">
+      <select id="f-facility">
+        <option value="">所有單位</option>
+        ${state.facilities.map(f=>`<option value="${escapeHtml(f)}" ${state.filters.facility===f?'selected':''}>${escapeHtml(f)}</option>`).join('')}
+      </select>
+      <select id="f-category">
+        <option value="">所有類別</option>
+        ${Object.entries(CATEGORY_META).map(([k,v])=>`<option value="${k}" ${state.filters.category===k?'selected':''}>${v.label}</option>`).join('')}
+      </select>
+      <select id="f-status">
+        <option value="">所有狀態</option>
+        <option value="valid" ${state.filters.status==='valid'?'selected':''}>有效</option>
+        <option value="warning" ${state.filters.status==='warning'?'selected':''}>90天內到期</option>
+        <option value="critical" ${state.filters.status==='critical'?'selected':''}>30天內到期</option>
+        <option value="expired" ${state.filters.status==='expired'?'selected':''}>已過期</option>
+      </select>
+      <select id="f-controlled">
+        <option value="">列管與否</option>
+        <option value="yes" ${state.filters.controlled==='yes'?'selected':''}>列管</option>
+        <option value="no" ${state.filters.controlled==='no'?'selected':''}>不列管</option>
+      </select>
+    </div>
+    <div class="filters" style="margin-top:-6px;">
+      <select id="f-sort">
+        <option value="expiryDate" ${state.sortBy==='expiryDate'?'selected':''}>依到期日排序</option>
+        <option value="name" ${state.sortBy==='name'?'selected':''}>依證照名稱排序</option>
+        <option value="facility" ${state.sortBy==='facility'?'selected':''}>依所屬單位排序</option>
+        <option value="department" ${state.sortBy==='department'?'selected':''}>依部門排序</option>
+        <option value="status" ${state.sortBy==='status'?'selected':''}>依緊急程度排序</option>
+      </select>
+      <select id="f-groupby">
+        <option value="none" ${state.groupBy==='none'?'selected':''}>不分組</option>
+        <option value="facility" ${state.groupBy==='facility'?'selected':''}>依廠區分組</option>
+        <option value="name" ${state.groupBy==='name'?'selected':''}>依證照名稱分組</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" data-action="toggle-columns">顯示欄位設定 ${state.showColumnPanel?'▲':'▼'}</button>
+    </div>
+    ${state.showColumnPanel ? renderColumnPanel() : ''}
+    <div class="table-wrap">
+      <table>
+        <thead><tr>${cols.map(cd=>`<th>${cd.label}</th>`).join('')}${can('edit') ? '<th></th>' : ''}</tr></thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderColumnPanel(){
+  const optional = COLUMN_DEFS.filter(cd=>!cd.always && isColAllowed(cd.key));
+  return `
+    <div class="col-panel">
+      ${optional.map(cd=>`<label><input type="checkbox" data-col-key="${cd.key}" ${state.visibleColumns.has(cd.key)?'checked':''}>${cd.label}</label>`).join('')}
+    </div>`;
+}
+
+function rowHtml(c){
+  const st = getStatus(c.expiryDate);
+  const cat = CATEGORY_META[c.category] || CATEGORY_META.other;
+  return `<tr>
+    <td><div class="cert-name">${escapeHtml(c.name)}</div><div class="cert-sub">${escapeHtml(c.holder||'')}</div></td>
+    <td><span class="tag ${cat.tagClass}">${cat.label}</span></td>
+    <td>${escapeHtml(c.facility||'—')}</td>
+    <td class="mono">${fmtDate(c.expiryDate)}</td>
+    <td><span class="status status-${st.key}"><span class="sw"></span>${st.label}</span></td>
+    <td>${fileCell(c)}</td>
+  </tr>`;
+}
+
+function rowHtmlFull(c){
+  const cols = visibleColumnDefs();
+  const actionsHtml = can('edit') ? `
+    <td>
+      <div class="row-actions">
+        <button class="icon-btn" title="編輯" data-action="edit-cert" data-id="${c.id}">✎</button>
+        <button class="icon-btn" title="刪除" data-action="delete-cert" data-id="${c.id}">🗑</button>
+      </div>
+    </td>` : '';
+  return `<tr>
+    ${cols.map(cd => cd.key==='name' ? `<td><div class="cert-name">${escapeHtml(c.name)}</div></td>` : `<td>${cellContent(c, cd.key)}</td>`).join('')}
+    ${actionsHtml}
+  </tr>`;
+}
+
+function fileCell(c){
+  if(!c.fileData) return `<span class="file-empty">未上傳</span>`;
+  if(!can('downloadFiles')) return `<span class="file-empty">📎 已上傳</span>`;
+  return `<span class="file-chip" data-action="view-file" data-id="${c.id}">📎 檢視</span>
+    <button class="icon-btn" data-action="download-file" data-id="${c.id}">⬇</button>`;
+}
+
+function renderTransferView(){
+  const persons = uniquePersons().filter(p=>{
+    if(!state.transferQuery) return true;
+    const q = state.transferQuery.toLowerCase();
+    return (p.name + p.department + p.facility + p.idNumber).toLowerCase().includes(q);
+  });
+  const selectedCount = state.transferSelected.size;
+  return `
+    <div class="topbar"><div><h2>人員異動</h2><div class="sub">勾選人員後一併異動廠區或部門</div></div></div>
+    <div class="filters">
+      <input type="text" id="t-q" placeholder="搜尋姓名、部門…" value="${escapeHtml(state.transferQuery)}">
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" data-action="select-all-transfer">全選</button>
+      <button class="btn btn-ghost btn-sm" data-action="clear-transfer-selection">取消全選</button>
+    </div>
+    <div class="table-wrap compact" style="margin-bottom:20px;">
+      <table>
+        <thead><tr><th style="width:36px;"></th><th>姓名</th><th>目前部門</th><th>目前單位</th><th>身份證字號</th><th>相關證照數</th></tr></thead>
+        <tbody>
+          ${persons.length ? persons.map(p=>`
+            <tr>
+              <td><input type="checkbox" data-transfer-key="${escapeHtml(p.key)}" ${state.transferSelected.has(p.key)?'checked':''}></td>
+              <td class="cert-name">${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(p.department||'—')}</td>
+              <td>${escapeHtml(p.facility||'—')}</td>
+              <td class="mono">${escapeHtml(p.idNumber||'—')}</td>
+              <td>${p.count}</td>
+            </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state">尚無人員證照</div></td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="max-width:480px;">
+      <div style="font-weight:700; margin-bottom:14px;">異動設定${selectedCount ? '（已選取 ' + selectedCount + ' 人）' : ''}</div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>新廠區 / 單位</label>
+        <select id="t-facility">
+          <option value="">維持不變</option>
+          ${state.facilities.map(f=>`<option value="${escapeHtml(f)}" ${state.transferTarget.facility===f?'selected':''}>${escapeHtml(f)}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-accent" data-action="apply-transfer" ${selectedCount===0?'disabled':''}>套用異動</button>
+    </div>
+  `;
+}
+
+function renderFacilitiesView(){
+  return `
+    <div class="topbar"><div><h2>單位管理</h2><div class="sub">維護總公司與各廠區名稱</div></div></div>
+    <div class="fac-list">
+      ${state.facilities.map(f=>{
+        const cnt = state.certs.filter(c=>c.facility===f).length;
+        const hasPw = !!(state.facilityManagerPasswords[f] && state.facilityManagerPasswords[f].length);
+        const depts = state.departmentsByFacility[f] || [];
+        const expanded = state.expandedFacilityDepts.has(f);
+        return `<div class="fac-row">
+          <div>${escapeHtml(f)}<span class="cnt">${cnt} 筆證照 · 密碼：${hasPw ? '已設定' : '未設定'}</span></div>
+          <div class="row-actions">
+            <button class="icon-btn" title="部門設定" data-action="toggle-dept" data-name="${escapeHtml(f)}">🏢</button>
+            <button class="icon-btn" title="密碼設定" data-action="set-fac-pw" data-name="${escapeHtml(f)}">🔑</button>
+            <button class="icon-btn" title="刪除" data-action="remove-fac" data-name="${escapeHtml(f)}">🗑</button>
+          </div>
+        </div>
+        ${expanded ? `
+          <div class="dept-panel">
+            <div class="dept-chip-list">
+              ${depts.length ? depts.map(d=>`<span class="dept-chip">${escapeHtml(d)}<button type="button" data-action="remove-dept" data-facility="${escapeHtml(f)}" data-dept="${escapeHtml(d)}">×</button></span>`).join('') : `<span class="file-empty">尚未設定部門</span>`}
+            </div>
+            <div class="add-fac" style="margin-top:10px;">
+              <input type="text" data-new-dept-for="${escapeHtml(f)}" placeholder="輸入部門名稱">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="add-dept" data-facility="${escapeHtml(f)}">新增部門</button>
+            </div>
+          </div>
+        ` : ''}`;
+      }).join('')}
+    </div>
+    <div class="add-fac">
+      <input type="text" id="new-fac" placeholder="輸入新單位名稱">
+      <button type="button" class="btn btn-accent" data-action="add-fac">新增單位</button>
+    </div>
+    ${renderManagedListSection('fileLocations', '檔案存放位置管理', '管理位置標籤')}
+    ${renderManagedListSection('certNameOptions', '證照名稱清單管理', '維護常用證照名稱')}
+    ${renderManagedListSection('authorityOptions', '發證機關清單管理', '維護常用發證機關')}
+  `;
+}
+
+function renderManagedListSection(listKey, title, subtitle){
+  const cfg = MANAGED_LISTS[listKey];
+  const items = state[cfg.stateKey];
+  return `
+    <div class="topbar" style="margin-top:36px;"><div><h2 style="font-size:18px;">${title}</h2><div class="sub">${subtitle}</div></div></div>
+    <div class="fac-list">
+      ${items.map(name=>{
+        const cnt = state.certs.filter(c=>c[cfg.certField]===name).length;
+        return `<div class="fac-row">
+          <div>${escapeHtml(name)}<span class="cnt">${cnt} 筆使用中</span></div>
+          <div class="row-actions">
+            <button type="button" class="icon-btn" data-action="rename-managed" data-list="${listKey}" data-name="${escapeHtml(name)}">✎</button>
+            <button type="button" class="icon-btn" data-action="remove-managed" data-list="${listKey}" data-name="${escapeHtml(name)}">🗑</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="add-fac">
+      <input type="text" data-new-managed="${listKey}" placeholder="${cfg.placeholder}">
+      <button type="button" class="btn btn-accent" data-action="add-managed" data-list="${listKey}">新增</button>
+    </div>
+  `;
+}
+
+function renderNotifyView(){
+  return `<div class="topbar"><div><h2>到期通知</h2><div class="sub">三階段到期提醒</div></div></div>
+    ${can('manageNotifications') ? renderNotifySettingsCard() : ''}
+    ${['stage1','stage2','stage3'].map(renderStageBlock).join('')}`;
+}
+
+function renderNotifySettingsCard(){
+  const ns = state.notifySettings;
+  return `<div class="card" style="max-width:640px; margin-bottom:24px;">
+    <div style="font-weight:700; margin-bottom:4px;">自動通知設定</div>
+    <form id="notify-settings-form">
+      ${['stage1','stage2','stage3'].map((key,i)=>{
+        const cfg = ns[key];
+        return `<div style="padding:14px 0; ${i>0?'border-top:1px solid var(--border);':''}">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+            <strong>${STAGE_LABELS[key]}</strong> 剩餘 <input type="number" name="${key}Days" value="${cfg.days}" style="width:70px; padding:6px 8px; border:1px solid var(--border); border-radius:6px;"> 天
+          </div>
+          <input type="email" name="${key}Email0" value="${escapeHtml(cfg.emails[0]||'')}" placeholder="收件人 Email" style="width:100%; max-width:360px; padding:8px 10px; border:1px solid var(--border); border-radius:7px;">
+        </div>`;
+      }).join('')}
+      <button type="submit" class="btn btn-primary" style="margin-top:6px;">儲存通知設定</button>
+    </form>
+  </div>`;
+}
+
+function renderStageBlock(stageKey){
+  const cfg = state.notifySettings[stageKey];
+  const pending = pendingForStage(stageKey);
+  const recipients = (cfg.emails||[]).map(e=>e.trim()).filter(Boolean);
+  return `<div class="card" style="margin-bottom:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div><strong>${STAGE_LABELS[stageKey]} · 剩餘 ${cfg.days} 天</strong></div>
+      <button type="button" class="btn btn-accent btn-sm" data-action="send-stage" data-stage="${stageKey}" ${(!recipients.length || !pending.length) ? 'disabled' : ''}>寄送通知信（${pending.length} 筆）</button>
+    </div>
+    ${pending.length ? `<div class="table-wrap compact"><table><thead><tr><th>名稱</th><th>單位</th><th>到期日</th></tr></thead><tbody>${pending.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.facility||'—')}</td><td class="mono">${fmtDate(c.expiryDate)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:10px;">無待通知項目</div>'}
+  </div>`;
+}
+
+function renderPermissionsView(){
+  const p = state.permissions;
+  return `<div class="topbar"><div><h2>權限設定</h2><div class="sub">設定密碼</div></div></div>
+    <div class="card" style="max-width:440px;">
+      <form id="perm-form">
+        <div class="field" style="margin-bottom:14px;"><label>總管理者密碼</label><input type="text" name="superAdmin" value="${escapeHtml(p.superAdmin)}"></div>
+        <div class="field" style="margin-bottom:18px;"><label>一般使用者密碼</label><input type="text" name="user" value="${escapeHtml(p.user)}"></div>
+        <button type="submit" class="btn btn-primary">儲存設定</button>
+      </form>
+    </div>`;
+}
+
+function renderModal(){
+  const { mode, data } = state.modal;
+  const fileName = state.pendingFile ? state.pendingFile.name : data.fileName;
+  return `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-head"><h3>${mode==='add' ? '新增證照' : '編輯證照'}</h3><button class="close-x" data-action="close-modal">×</button></div>
+      <form id="cert-form">
+        <div class="modal-body">
+          ${renderComboField('name', '證照名稱', state.certNameOptions, data.name, { required:true, full:true, placeholder:'例如：甲級職業安全衛生管理員' })}
+          <div class="field"><label>類別</label><select name="category">${Object.entries(CATEGORY_META).map(([k,v])=>`<option value="${k}" ${data.category===k?'selected':''}>${v.label}</option>`).join('')}</select></div>
+          <div class="field"><label>所屬單位</label><select name="facility">${state.facilities.map(f=>`<option value="${escapeHtml(f)}" ${data.facility===f?'selected':''}>${escapeHtml(f)}</option>`).join('')}</select></div>
+          <div class="field"><label>持有人 / 設備</label><input name="holder" type="text" value="${escapeHtml(data.holder)}"></div>
+          ${renderComboField('department', '部門', state.departmentsByFacility[data.facility] || [], data.department, { placeholder:'例如：製造二課' })}
+          <div class="field"><label>身份證字號</label><input name="idNumber" type="text" class="mono" value="${escapeHtml(data.idNumber||'')}"></div>
+          <div class="field"><label>生日</label><input name="birthday" type="date" value="${data.birthday||''}"></div>
+          ${renderComboField('authority', '發證機關', state.authorityOptions, data.authority, { placeholder:'例如：勞動部' })}
+          <div class="field"><label>證照字號</label><input name="certNo" type="text" class="mono" value="${escapeHtml(data.certNo)}"></div>
+          <div class="field"><label>發證日期</label><input name="issueDate" type="date" value="${data.issueDate||''}"></div>
+          <div class="field"><label>到期日 *</label><input name="expiryDate" type="date" value="${data.expiryDate||''}" required></div>
+          <div class="field"><label>回訓日期</label><input name="retrainDate" type="date" value="${data.retrainDate||''}"></div>
+          <div class="field"><label>回訓年限（年）</label><input name="retrainYears" type="number" min="0" step="0.5" value="${escapeHtml(data.retrainYears||'')}"></div>
+          <div class="field"><label>列管與否</label><select name="controlled"><option value="no" ${data.controlled!=='yes'?'selected':''}>不列管</option><option value="yes" ${data.controlled==='yes'?'selected':''}>列管</option></select></div>
+          <div class="field full"><label>備註</label><textarea name="notes">${escapeHtml(data.notes)}</textarea></div>
+          <div class="field"><label>檔案存放位置</label><select name="fileLocation"><option value="">未設定</option>${state.fileLocations.map(loc=>`<option value="${escapeHtml(loc)}" ${data.fileLocation===loc?'selected':''}>${escapeHtml(loc)}</option>`).join('')}</select></div>
+          <div class="field full">
+            <label>掃描檔附件</label>
+            <input type="file" id="file-input" accept="image/*,application/pdf">
+            <div class="filehint">上限 4MB。${fileName ? '目前檔案：' + escapeHtml(fileName) : ''}</div>
+            ${fileName ? `<div><button type="button" class="btn btn-ghost btn-sm" data-action="clear-file" style="margin-top:6px;">移除檔案</button></div>` : ''}
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-action="close-modal">取消</button>
+          <button type="submit" class="btn btn-primary">${mode==='add' ? '新增' : '儲存變更'}</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+
+function attachEvents(){
+  document.querySelectorAll('[data-nav]').forEach(el=> el.addEventListener('click', ()=> setView(el.dataset.nav)));
+  const addBtn = document.querySelector('[data-action="add-cert"]');
+  if(addBtn) addBtn.addEventListener('click', openAddModal);
+
+  document.querySelectorAll('[data-action="edit-cert"]').forEach(el=> el.addEventListener('click', ()=> openEditModal(el.dataset.id)));
+  document.querySelectorAll('[data-action="delete-cert"]').forEach(el=> el.addEventListener('click', ()=> deleteCert(el.dataset.id)));
+  document.querySelectorAll('[data-action="view-file"]').forEach(el=> el.addEventListener('click', ()=> viewAttachment(el.dataset.id)));
+  document.querySelectorAll('[data-action="download-file"]').forEach(el=> el.addEventListener('click', ()=> downloadAttachment(el.dataset.id)));
+
+  const resetBtn = document.querySelector('[data-action="reset-all"]');
+  if(resetBtn) resetBtn.addEventListener('click', resetAll);
+  const logoutBtn = document.querySelector('[data-action="logout"]');
+  if(logoutBtn) logoutBtn.addEventListener('click', logout);
+  const permForm = document.getElementById('perm-form');
+  if(permForm) permForm.addEventListener('submit', (e)=>{ e.preventDefault(); savePermissions(e.target); });
+
+  const notifySettingsForm = document.getElementById('notify-settings-form');
+  if(notifySettingsForm) notifySettingsForm.addEventListener('submit', (e)=>{ e.preventDefault(); saveNotifySettings(e.target); });
+  document.querySelectorAll('[data-action="send-stage"]').forEach(el=> el.addEventListener('click', ()=> sendStageNotification(el.dataset.stage)));
+
+  const exportBtn = document.querySelector('[data-action="export-csv"]');
+  if(exportBtn) exportBtn.addEventListener('click', exportCsv);
+
+  const fq = document.getElementById('f-q');
+  if(fq){ fq.addEventListener('input', ()=> updateFilter('q', fq.value)); fq.focus(); fq.selectionStart = fq.value.length; }
+  const ff = document.getElementById('f-facility');
+  if(ff) ff.addEventListener('change', ()=> updateFilter('facility', ff.value));
+  const fc = document.getElementById('f-category');
+  if(fc) fc.addEventListener('change', ()=> updateFilter('category', fc.value));
+  const fs = document.getElementById('f-status');
+  if(fs) fs.addEventListener('change', ()=> updateFilter('status', fs.value));
+  const fctrl = document.getElementById('f-controlled');
+  if(fctrl) fctrl.addEventListener('change', ()=> updateFilter('controlled', fctrl.value));
+  const fSort = document.getElementById('f-sort');
+  if(fSort) fSort.addEventListener('change', ()=> { state.sortBy = fSort.value; render(); });
+  const fGroupBy = document.getElementById('f-groupby');
+  if(fGroupBy) fGroupBy.addEventListener('change', ()=> { state.groupBy = fGroupBy.value; render(); });
+  const toggleColBtn = document.querySelector('[data-action="toggle-columns"]');
+  if(toggleColBtn) toggleColBtn.addEventListener('click', ()=> { state.showColumnPanel = !state.showColumnPanel; render(); });
+  document.querySelectorAll('[data-col-key]').forEach(el=> el.addEventListener('change', ()=> toggleColumn(el.dataset.colKey)));
+
+  const newFac = document.getElementById('new-fac');
+  const addFacBtn = document.querySelector('[data-action="add-fac"]');
+  if(addFacBtn && newFac){
+    addFacBtn.addEventListener('click', ()=> addFacility(newFac));
+    newFac.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addFacility(newFac); } });
+  }
+  document.querySelectorAll('[data-action="remove-fac"]').forEach(el=> el.addEventListener('click', ()=> removeFacility(el.dataset.name)));
+  document.querySelectorAll('[data-action="set-fac-pw"]').forEach(el=> el.addEventListener('click', ()=> setFacilityManagerPassword(el.dataset.name)));
+  document.querySelectorAll('[data-action="toggle-dept"]').forEach(el=> el.addEventListener('click', ()=> toggleFacilityDeptPanel(el.dataset.name)));
+  document.querySelectorAll('[data-action="add-dept"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const facility = el.dataset.facility;
+      const input = document.querySelector(`[data-new-dept-for="${CSS.escape(facility)}"]`);
+      if(input) addDepartment(facility, input);
+    });
+  });
+  document.querySelectorAll('[data-action="remove-dept"]').forEach(el=> el.addEventListener('click', ()=> removeDepartment(el.dataset.facility, el.dataset.dept)));
+  document.querySelectorAll('[data-action="add-managed"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const listKey = el.dataset.list;
+      const input = document.querySelector(`[data-new-managed="${CSS.escape(listKey)}"]`);
+      if(input) addManagedListItem(listKey, input);
+    });
+  });
+  document.querySelectorAll('[data-action="rename-managed"]').forEach(el=> el.addEventListener('click', ()=> renameManagedListItem(el.dataset.list, el.dataset.name)));
+  document.querySelectorAll('[data-action="remove-managed"]').forEach(el=> el.addEventListener('click', ()=> removeManagedListItem(el.dataset.list, el.dataset.name)));
+
+  const tq = document.getElementById('t-q');
+  if(tq){ tq.addEventListener('input', ()=> { state.transferQuery = tq.value; render(); }); tq.focus(); tq.selectionStart = tq.value.length; }
+  document.querySelectorAll('[data-transfer-key]').forEach(el=> el.addEventListener('change', ()=> toggleTransferPerson(el.dataset.transferKey)));
+  const selAllBtn = document.querySelector('[data-action="select-all-transfer"]');
+  if(selAllBtn) selAllBtn.addEventListener('click', selectAllTransfer);
+  const clearSelBtn = document.querySelector('[data-action="clear-transfer-selection"]');
+  if(clearSelBtn) clearSelBtn.addEventListener('click', clearTransferSelection);
+  const tFacility = document.getElementById('t-facility');
+  if(tFacility) tFacility.addEventListener('change', ()=> { state.transferTarget.facility = tFacility.value; render(); });
+  const applyBtn = document.querySelector('[data-action="apply-transfer"]');
+  if(applyBtn) applyBtn.addEventListener('click', applyTransfer);
+
+  const overlay = document.getElementById('overlay');
+  if(overlay){
+    overlay.addEventListener('mousedown', (e)=>{
+      if(suppressOverlayClose){ suppressOverlayClose = false; return; }
+      if(e.target === overlay) closeModal();
+    });
+  }
+  document.querySelectorAll('[data-action="close-modal"]').forEach(el=> el.addEventListener('click', closeModal));
+  const form = document.getElementById('cert-form');
+  if(form){
+    form.addEventListener('submit', submitModal);
+    ['issueDate','retrainDate','retrainYears'].forEach(fieldName=>{
+      const el = form.elements[fieldName];
+      if(el) el.addEventListener('input', ()=> recalcExpiryDate(form));
+    });
+    form.querySelectorAll('[data-combo]').forEach(select=>{
+      const otherInput = form.elements[select.name + 'Other'];
+      const sync = ()=>{ if(otherInput) otherInput.style.display = (select.value === '__other__') ? '' : 'none'; };
+      select.addEventListener('change', sync);
+    });
+  }
+  const fileInput = document.getElementById('file-input');
+  if(fileInput){
+    fileInput.addEventListener('click', ()=>{ suppressOverlayClose = true; });
+    fileInput.addEventListener('change', ()=>{
+      handleFileInput(fileInput);
+      suppressOverlayClose = true;
+      setTimeout(()=>{ suppressOverlayClose = false; }, 400);
+    });
+  }
+  const clearFileBtn = document.querySelector('[data-action="clear-file"]');
+  if(clearFileBtn) clearFileBtn.addEventListener('click', clearPendingFile);
+}
+
+function attachLoginEvents(){
+  const form = document.getElementById('login-form');
+  if(!form) return;
+  const roleSelect = document.getElementById('login-role');
+  const facField = document.getElementById('login-facility-field');
+  function syncFacilityVisibility(){
+    if(facField) facField.style.display = (roleSelect && roleSelect.value === 'facilityManager') ? '' : 'none';
+  }
+  if(roleSelect){ syncFacilityVisibility(); roleSelect.addEventListener('change', syncFacilityVisibility); }
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const role = form.role.value;
+    const facility = role === 'facilityManager' ? form.facility.value : null;
+    attemptLogin(role, form.password.value, facility);
+  });
+  const pwField = document.getElementById('login-password');
+  if(pwField) pwField.focus();
+}
+
+loadData();
+</script>
+</body>
+</html>
