@@ -244,7 +244,6 @@ function getStatus(dateStr){
   return { key:'valid', label:'有效', days:d };
 }
 
-/* 修正日期顯示：自動濾除 ISO 時區字串，只取 YYYY-MM-DD */
 function fmtDate(s){
   if(!s) return '—';
   const str = String(s);
@@ -446,6 +445,8 @@ async function handleFileInput(input){
     }
     const hint = document.getElementById('file-hint-text');
     if(hint) hint.textContent = '目前檔案：' + file.name;
+    const clearWrap = document.getElementById('clear-file-wrap');
+    if(clearWrap) clearWrap.style.display = 'block';
   };
   reader.onerror = () => showToast('讀取檔案失敗，請重試');
   reader.readAsDataURL(file);
@@ -530,8 +531,6 @@ function viewAttachment(id){
   if(!can('downloadFiles')) return;
   const c = state.certs.find(x=>x.id===id);
   if(!c || !c.fileData) return;
-  
-  // 支援 Base64 檔案在新分頁正確開啟
   const win = window.open();
   if(win){
     win.document.write(`
@@ -544,11 +543,6 @@ function viewAttachment(id){
       </html>
     `);
     win.document.close();
-  } else {
-    // 備用方案
-    const a = document.createElement('a');
-    a.href = c.fileData; a.target = '_blank'; a.rel = 'noopener';
-    document.body.appendChild(a); a.click(); a.remove();
   }
 }
 
@@ -873,10 +867,23 @@ function personKey(c){
   return 'NAME:' + (c.holder||'').trim();
 }
 
-function allDepartmentsUnion(){
-  const set = new Set();
-  Object.values(state.departmentsByFacility).forEach(arr => (arr||[]).forEach(d=>set.add(d)));
-  return Array.from(set).sort((a,b)=> a.localeCompare(b,'zh-Hant'));
+function uniquePersons(){
+  const map = new Map();
+  state.certs.forEach(c=>{
+    if(c.category !== 'person') return;
+    const name = (c.holder||'').trim();
+    if(!name) return;
+    const key = personKey(c);
+    if(!map.has(key)){
+      map.set(key, { key, name, idNumber:c.idNumber||'', department:c.department||'', facility:c.facility||'', count:0 });
+    }
+    const rec = map.get(key);
+    rec.count++;
+    if(!rec.department && c.department) rec.department = c.department;
+    if(!rec.facility && c.facility) rec.facility = c.facility;
+    if(!rec.idNumber && c.idNumber) rec.idNumber = c.idNumber;
+  });
+  return Array.from(map.values()).sort((a,b)=> a.name.localeCompare(b.name,'zh-Hant'));
 }
 
 function getNotifyStage(c){
@@ -893,10 +900,6 @@ function getNotifyStage(c){
 
 function pendingForStage(stageKey){
   return scopedCerts().filter(c => getNotifyStage(c) === stageKey && !(c.notifiedStages && c.notifiedStages[stageKey]));
-}
-
-function notifiedForStage(stageKey){
-  return scopedCerts().filter(c => getNotifyStage(c) === stageKey && c.notifiedStages && c.notifiedStages[stageKey]);
 }
 
 async function saveNotifySettings(form){
@@ -933,27 +936,11 @@ async function sendStageNotification(stageKey){
   await persist();
 }
 
-/* 新增：Line 快速通知功能 */
 function sendLineNotification(list){
   if(!list.length){ showToast('沒有可發送的證照項目'); return; }
   const text = '【證照到期提醒】\n以下證照即將到期，請儘速安排回訓：\n\n' + buildCertListText(list);
   const lineUrl = 'https://line.me/R/msg/text/?' + encodeURIComponent(text);
   window.open(lineUrl, '_blank');
-}
-
-async function resetNotifiedFlag(certId, stageKey){
-  if(!can('notify')) return;
-  const c = state.certs.find(x=>x.id===certId);
-  if(!c || !c.notifiedStages) return;
-  delete c.notifiedStages[stageKey];
-  render();
-  await persist();
-}
-
-function toggleManualSelect(id){
-  if(state.manualNotify.selected.has(id)) state.manualNotify.selected.delete(id);
-  else state.manualNotify.selected.add(id);
-  render();
 }
 
 function render(){
@@ -1500,17 +1487,27 @@ function attachEvents(){
   document.querySelectorAll('[data-action="rename-managed"]').forEach(el=> el.addEventListener('click', ()=> renameManagedListItem(el.dataset.list, el.dataset.name)));
   document.querySelectorAll('[data-action="remove-managed"]').forEach(el=> el.addEventListener('click', ()=> removeManagedListItem(el.dataset.list, el.dataset.name)));
 
+  /* 修正人員異動頁面的事件綁定 */
   const tq = document.getElementById('t-q');
-  if(tq){ tq.addEventListener('input', ()=> { state.transferQuery = tq.value; render(); }); tq.focus(); tq.selectionStart = tq.value.length; }
-  document.querySelectorAll('[data-transfer-key]').forEach(el=> el.addEventListener('change', ()=> toggleTransferPerson(el.dataset.transferKey)));
+  if(tq){
+    tq.addEventListener('input', ()=> { state.transferQuery = tq.value; render(); });
+    tq.focus(); tq.selectionStart = tq.value.length;
+  }
+  document.querySelectorAll('[data-transfer-key]').forEach(el=>{
+    el.addEventListener('change', ()=> toggleTransferPerson(el.dataset.transferKey));
+  });
   const selAllBtn = document.querySelector('[data-action="select-all-transfer"]');
   if(selAllBtn) selAllBtn.addEventListener('click', selectAllTransfer);
   const clearSelBtn = document.querySelector('[data-action="clear-transfer-selection"]');
   if(clearSelBtn) clearSelBtn.addEventListener('click', clearTransferSelection);
   const tFacility = document.getElementById('t-facility');
-  if(tFacility) tFacility.addEventListener('change', ()=> { state.transferTarget.facility = tFacility.value; render(); });
+  if(tFacility){
+    tFacility.addEventListener('change', ()=> { state.transferTarget.facility = tFacility.value; render(); });
+  }
   const applyBtn = document.querySelector('[data-action="apply-transfer"]');
-  if(applyBtn) applyBtn.addEventListener('click', applyTransfer);
+  if(applyBtn){
+    applyBtn.addEventListener('click', applyTransfer);
+  }
 
   const overlay = document.getElementById('overlay');
   const modalBox = document.getElementById('modal-box');
