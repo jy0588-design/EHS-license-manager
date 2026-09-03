@@ -1218,6 +1218,13 @@ function renderTransferView(){
     return (p.name + p.department + p.facility + p.idNumber).toLowerCase().includes(q);
   });
   const selectedCount = state.transferSelected.size;
+  
+  // 取得目前選擇的新廠區對應部門清單
+  const targetFacility = state.transferTarget.facility;
+  const deptOptions = targetFacility ? (state.departmentsByFacility[targetFacility] || []) : [];
+  const curDept = state.transferTarget.department;
+  const isCustomDept = curDept && !deptOptions.includes(curDept);
+
   return `
     <div class="topbar"><div><h2>人員異動</h2><div class="sub">勾選人員後一併異動廠區或部門</div></div></div>
     <div class="filters">
@@ -1248,8 +1255,17 @@ function renderTransferView(){
         <label>新廠區 / 單位</label>
         <select id="t-facility">
           <option value="">維持不變</option>
-          ${state.facilities.map(f=>`<option value="${escapeHtml(f)}" ${state.transferTarget.facility===f?'selected':''}>${escapeHtml(f)}</option>`).join('')}
+          ${state.facilities.map(f=>`<option value="${escapeHtml(f)}" ${targetFacility===f?'selected':''}>${escapeHtml(f)}</option>`).join('')}
         </select>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>新部門</label>
+        <select id="t-department-select" ${!targetFacility ? 'disabled' : ''}>
+          <option value="">${targetFacility ? '維持不變 / 未指定' : '請先選擇上方新廠區'}</option>
+          ${deptOptions.map(d=>`<option value="${escapeHtml(d)}" ${(!isCustomDept && curDept===d)?'selected':''}>${escapeHtml(d)}</option>`).join('')}
+          <option value="__other__" ${isCustomDept?'selected':''}>其他（自行輸入）</option>
+        </select>
+        <input type="text" id="t-department-other" placeholder="輸入新部門名稱" style="margin-top:6px;${isCustomDept?'':'display:none;'}" value="${isCustomDept?escapeHtml(curDept):''}">
       </div>
       <button class="btn btn-accent" data-action="apply-transfer" ${selectedCount===0?'disabled':''}>套用異動</button>
     </div>
@@ -1258,7 +1274,7 @@ function renderTransferView(){
 
 function renderFacilitiesView(){
   return `
-    <div class="topbar"><div><h2>單位管理</h2><div class="sub">維護總公司與各廠區名稱</div></div></div>
+    <div class="topbar"><div><h2>單位管理</h2><div class="sub">維護總公司與各廠區名稱，並可展開設定第二層部門</div></div></div>
     <div class="fac-list">
       ${state.facilities.map(f=>{
         const cnt = state.certs.filter(c=>c.facility===f).length;
@@ -1266,7 +1282,7 @@ function renderFacilitiesView(){
         const depts = state.departmentsByFacility[f] || [];
         const expanded = state.expandedFacilityDepts.has(f);
         return `<div class="fac-row">
-          <div>${escapeHtml(f)}<span class="cnt">${cnt} 筆證照 · 密碼：${hasPw ? '已設定' : '未設定'}</span></div>
+          <div>${escapeHtml(f)}<span class="cnt">${cnt} 筆證照 · 密碼：${hasPw ? '已設定' : '未設定'} · ${depts.length} 個部門</span></div>
           <div class="row-actions">
             <button class="icon-btn" title="部門設定" data-action="toggle-dept" data-name="${escapeHtml(f)}">🏢</button>
             <button class="icon-btn" title="密碼設定" data-action="set-fac-pw" data-name="${escapeHtml(f)}">🔑</button>
@@ -1275,11 +1291,12 @@ function renderFacilitiesView(){
         </div>
         ${expanded ? `
           <div class="dept-panel">
+            <div style="font-weight:600; font-size:12px; color:var(--muted); margin-bottom:6px;">「${escapeHtml(f)}」底下的部門：</div>
             <div class="dept-chip-list">
               ${depts.length ? depts.map(d=>`<span class="dept-chip">${escapeHtml(d)}<button type="button" data-action="remove-dept" data-facility="${escapeHtml(f)}" data-dept="${escapeHtml(d)}">×</button></span>`).join('') : `<span class="file-empty">尚未設定部門</span>`}
             </div>
             <div class="add-fac" style="margin-top:10px;">
-              <input type="text" data-new-dept-for="${escapeHtml(f)}" placeholder="輸入部門名稱">
+              <input type="text" data-new-dept-for="${escapeHtml(f)}" placeholder="輸入新部門名稱">
               <button type="button" class="btn btn-ghost btn-sm" data-action="add-dept" data-facility="${escapeHtml(f)}">新增部門</button>
             </div>
           </div>
@@ -1487,7 +1504,7 @@ function attachEvents(){
   document.querySelectorAll('[data-action="rename-managed"]').forEach(el=> el.addEventListener('click', ()=> renameManagedListItem(el.dataset.list, el.dataset.name)));
   document.querySelectorAll('[data-action="remove-managed"]').forEach(el=> el.addEventListener('click', ()=> removeManagedListItem(el.dataset.list, el.dataset.name)));
 
-  /* 修正人員異動頁面的事件綁定 */
+  /* 人員異動事件綁定 */
   const tq = document.getElementById('t-q');
   if(tq){
     tq.addEventListener('input', ()=> { state.transferQuery = tq.value; render(); });
@@ -1500,10 +1517,33 @@ function attachEvents(){
   if(selAllBtn) selAllBtn.addEventListener('click', selectAllTransfer);
   const clearSelBtn = document.querySelector('[data-action="clear-transfer-selection"]');
   if(clearSelBtn) clearSelBtn.addEventListener('click', clearTransferSelection);
+  
   const tFacility = document.getElementById('t-facility');
   if(tFacility){
-    tFacility.addEventListener('change', ()=> { state.transferTarget.facility = tFacility.value; render(); });
+    tFacility.addEventListener('change', ()=> {
+      state.transferTarget.facility = tFacility.value;
+      state.transferTarget.department = ''; // 變更廠區時清空原部門選擇
+      render();
+    });
   }
+
+  const tDeptSelect = document.getElementById('t-department-select');
+  const tDeptOther = document.getElementById('t-department-other');
+  if(tDeptSelect){
+    tDeptSelect.addEventListener('change', ()=>{
+      if(tDeptSelect.value === '__other__'){
+        if(tDeptOther){ tDeptOther.style.display = ''; tDeptOther.focus(); }
+        state.transferTarget.department = tDeptOther ? tDeptOther.value : '';
+      }else{
+        if(tDeptOther) tDeptOther.style.display = 'none';
+        state.transferTarget.department = tDeptSelect.value;
+      }
+    });
+  }
+  if(tDeptOther){
+    tDeptOther.addEventListener('input', ()=>{ state.transferTarget.department = tDeptOther.value; });
+  }
+
   const applyBtn = document.querySelector('[data-action="apply-transfer"]');
   if(applyBtn){
     applyBtn.addEventListener('click', applyTransfer);
@@ -1530,7 +1570,22 @@ function attachEvents(){
       const sync = ()=>{ if(otherInput) otherInput.style.display = (select.value === '__other__') ? '' : 'none'; };
       select.addEventListener('change', sync);
     });
+    
+    // 新增證照視窗內：切換廠區時連動部門下拉選單
+    const facilitySelect = form.elements['facility'];
+    const deptSelect = form.elements['department'];
+    if(facilitySelect && deptSelect){
+      facilitySelect.addEventListener('change', ()=>{
+        const depts = state.departmentsByFacility[facilitySelect.value] || [];
+        deptSelect.innerHTML = `<option value="">未選擇</option>`
+          + depts.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('')
+          + `<option value="__other__">其他（自行輸入）</option>`;
+        const otherInput = form.elements['departmentOther'];
+        if(otherInput){ otherInput.value = ''; otherInput.style.display = 'none'; }
+      });
+    }
   }
+
   const fileInput = document.getElementById('file-input');
   if(fileInput){
     fileInput.addEventListener('change', ()=>{
