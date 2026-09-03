@@ -244,7 +244,13 @@ function getStatus(dateStr){
   return { key:'valid', label:'有效', days:d };
 }
 
-function fmtDate(s){ return s || '—'; }
+/* 修正日期顯示：自動濾除 ISO 時區字串，只取 YYYY-MM-DD */
+function fmtDate(s){
+  if(!s) return '—';
+  const str = String(s);
+  if(str.includes('T')) return str.split('T')[0];
+  return str.slice(0, 10);
+}
 
 function recalcExpiryDate(form){
   const yearsField = form.elements['retrainYears'];
@@ -433,7 +439,13 @@ async function handleFileInput(input){
   const reader = new FileReader();
   reader.onload = () => {
     state.pendingFile = { name: file.name, type: file.type, dataUrl: reader.result };
-    render();
+    if(state.modal){
+      state.modal.data.fileName = file.name;
+      state.modal.data.fileType = file.type;
+      state.modal.data.fileData = reader.result;
+    }
+    const hint = document.getElementById('file-hint-text');
+    if(hint) hint.textContent = '目前檔案：' + file.name;
   };
   reader.onerror = () => showToast('讀取檔案失敗，請重試');
   reader.readAsDataURL(file);
@@ -442,7 +454,12 @@ async function handleFileInput(input){
 function clearPendingFile(){
   state.pendingFile = null;
   if(state.modal){ state.modal.data.fileName=''; state.modal.data.fileType=''; state.modal.data.fileData=''; }
-  render();
+  const hint = document.getElementById('file-hint-text');
+  if(hint) hint.textContent = '支援圖片或 PDF，單檔上限 4MB。';
+  const fileInput = document.getElementById('file-input');
+  if(fileInput) fileInput.value = '';
+  const clearWrap = document.getElementById('clear-file-wrap');
+  if(clearWrap) clearWrap.style.display = 'none';
 }
 
 async function submitModal(ev){
@@ -513,9 +530,26 @@ function viewAttachment(id){
   if(!can('downloadFiles')) return;
   const c = state.certs.find(x=>x.id===id);
   if(!c || !c.fileData) return;
-  const a = document.createElement('a');
-  a.href = c.fileData; a.target = '_blank'; a.rel = 'noopener';
-  document.body.appendChild(a); a.click(); a.remove();
+  
+  // 支援 Base64 檔案在新分頁正確開啟
+  const win = window.open();
+  if(win){
+    win.document.write(`
+      <html>
+      <head><title>${escapeHtml(c.name)} - 附件檢視</title></head>
+      <body style="margin:0;background:#333;display:flex;align-items:center;justify-content:center;height:100vh;">
+        <img src="${c.fileData}" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.style.display='none'; document.getElementById('pdf-frame').style.display='block';">
+        <iframe id="pdf-frame" src="${c.fileData}" style="display:none;width:100%;height:100%;border:none;"></iframe>
+      </body>
+      </html>
+    `);
+    win.document.close();
+  } else {
+    // 備用方案
+    const a = document.createElement('a');
+    a.href = c.fileData; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
 }
 
 function downloadAttachment(id){
@@ -700,12 +734,12 @@ function csvValue(c, key){
     case 'department': return c.department;
     case 'facility': return c.facility;
     case 'idNumber': return c.idNumber;
-    case 'birthday': return c.birthday;
+    case 'birthday': return fmtDate(c.birthday);
     case 'authority': return c.authority;
     case 'certNo': return c.certNo;
-    case 'issueDate': return c.issueDate;
-    case 'expiryDate': return c.expiryDate;
-    case 'retrainDate': return c.retrainDate;
+    case 'issueDate': return fmtDate(c.issueDate);
+    case 'expiryDate': return fmtDate(c.expiryDate);
+    case 'retrainDate': return fmtDate(c.retrainDate);
     case 'retrainYears': return c.retrainYears;
     case 'controlled': return c.controlled==='yes' ? '列管' : '不列管';
     case 'status': return getStatus(c.expiryDate).label;
@@ -880,7 +914,7 @@ async function saveNotifySettings(form){
 function buildCertListText(list){
   return list.map(c=>{
     const d = daysUntil(c.expiryDate);
-    return '・' + c.name + '｜' + (c.facility||'—') + '｜' + (c.holder||'—') + '｜到期日：' + c.expiryDate + '｜剩餘 ' + d + ' 天';
+    return '・' + c.name + '｜' + (c.facility||'—') + '｜' + (c.holder||'—') + '｜到期日：' + fmtDate(c.expiryDate) + '｜剩餘 ' + d + ' 天';
   }).join('\n');
 }
 
@@ -899,6 +933,14 @@ async function sendStageNotification(stageKey){
   await persist();
 }
 
+/* 新增：Line 快速通知功能 */
+function sendLineNotification(list){
+  if(!list.length){ showToast('沒有可發送的證照項目'); return; }
+  const text = '【證照到期提醒】\n以下證照即將到期，請儘速安排回訓：\n\n' + buildCertListText(list);
+  const lineUrl = 'https://line.me/R/msg/text/?' + encodeURIComponent(text);
+  window.open(lineUrl, '_blank');
+}
+
 async function resetNotifiedFlag(certId, stageKey){
   if(!can('notify')) return;
   const c = state.certs.find(x=>x.id===certId);
@@ -912,37 +954,6 @@ function toggleManualSelect(id){
   if(state.manualNotify.selected.has(id)) state.manualNotify.selected.delete(id);
   else state.manualNotify.selected.add(id);
   render();
-}
-
-function sendManualNotification(){
-  if(!can('notify')) return;
-  const recipients = state.manualNotify.recipients.split(/[,;\n]/).map(s=>s.trim()).filter(Boolean);
-  if(!recipients.length){ showToast('請輸入至少一位收件人 Email'); return; }
-  const selectedCerts = scopedCerts().filter(c=> state.manualNotify.selected.has(c.id));
-  if(!selectedCerts.length){ showToast('請至少勾選一筆證照'); return; }
-  const subject = '【證照通知】證照到期提醒';
-  const customMsg = state.manualNotify.message.trim();
-  const body = (customMsg ? customMsg + '\n\n' : '') + buildCertListText(selectedCerts);
-  window.location.href = 'mailto:' + encodeURIComponent(recipients.join(',')).replace(/%2C/g,',') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-}
-
-function uniquePersons(){
-  const map = new Map();
-  state.certs.forEach(c=>{
-    if(c.category !== 'person') return;
-    const name = (c.holder||'').trim();
-    if(!name) return;
-    const key = personKey(c);
-    if(!map.has(key)){
-      map.set(key, { key, name, idNumber:c.idNumber||'', department:c.department||'', facility:c.facility||'', count:0 });
-    }
-    const rec = map.get(key);
-    rec.count++;
-    if(!rec.department && c.department) rec.department = c.department;
-    if(!rec.facility && c.facility) rec.facility = c.facility;
-    if(!rec.idNumber && c.idNumber) rec.idNumber = c.idNumber;
-  });
-  return Array.from(map.values()).sort((a,b)=> a.name.localeCompare(b.name,'zh-Hant'));
 }
 
 function render(){
@@ -1323,7 +1334,7 @@ function renderManagedListSection(listKey, title, subtitle){
 }
 
 function renderNotifyView(){
-  return `<div class="topbar"><div><h2>到期通知</h2><div class="sub">三階段到期提醒</div></div></div>
+  return `<div class="topbar"><div><h2>到期通知</h2><div class="sub">三階段到期提醒（支援 Email 與 Line 快速發送）</div></div></div>
     ${can('manageNotifications') ? renderNotifySettingsCard() : ''}
     ${['stage1','stage2','stage3'].map(renderStageBlock).join('')}`;
 }
@@ -1352,9 +1363,12 @@ function renderStageBlock(stageKey){
   const pending = pendingForStage(stageKey);
   const recipients = (cfg.emails||[]).map(e=>e.trim()).filter(Boolean);
   return `<div class="card" style="margin-bottom:20px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
       <div><strong>${STAGE_LABELS[stageKey]} · 剩餘 ${cfg.days} 天</strong></div>
-      <button type="button" class="btn btn-accent btn-sm" data-action="send-stage" data-stage="${stageKey}" ${(!recipients.length || !pending.length) ? 'disabled' : ''}>寄送通知信（${pending.length} 筆）</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-accent btn-sm" data-action="send-stage" data-stage="${stageKey}" ${(!recipients.length || !pending.length) ? 'disabled' : ''}>寄送 Email（${pending.length}）</button>
+        <button type="button" class="btn btn-sm" style="background:#06C755; color:#fff;" data-action="send-line" data-stage="${stageKey}" ${!pending.length ? 'disabled' : ''}>💬 發送 Line 通知</button>
+      </div>
     </div>
     ${pending.length ? `<div class="table-wrap compact"><table><thead><tr><th>名稱</th><th>單位</th><th>到期日</th></tr></thead><tbody>${pending.map(c=>`<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.facility||'—')}</td><td class="mono">${fmtDate(c.expiryDate)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty-state" style="padding:10px;">無待通知項目</div>'}
   </div>`;
@@ -1374,7 +1388,7 @@ function renderPermissionsView(){
 
 function renderModal(){
   const { mode, data } = state.modal;
-  const fileName = state.pendingFile ? state.pendingFile.name : data.fileName;
+  const fileName = (state.pendingFile ? state.pendingFile.name : null) || data.fileName;
   return `
   <div class="overlay" id="overlay">
     <div class="modal" id="modal-box">
@@ -1387,12 +1401,12 @@ function renderModal(){
           <div class="field"><label>持有人 / 設備</label><input name="holder" type="text" value="${escapeHtml(data.holder)}"></div>
           ${renderComboField('department', '部門', state.departmentsByFacility[data.facility] || [], data.department, { placeholder:'例如：製造二課' })}
           <div class="field"><label>身份證字號</label><input name="idNumber" type="text" class="mono" value="${escapeHtml(data.idNumber||'')}"></div>
-          <div class="field"><label>生日</label><input name="birthday" type="date" value="${data.birthday||''}"></div>
+          <div class="field"><label>生日</label><input name="birthday" type="date" value="${fmtDate(data.birthday)}"></div>
           ${renderComboField('authority', '發證機關', state.authorityOptions, data.authority, { placeholder:'例如：勞動部' })}
           <div class="field"><label>證照字號</label><input name="certNo" type="text" class="mono" value="${escapeHtml(data.certNo)}"></div>
-          <div class="field"><label>發證日期</label><input name="issueDate" type="date" value="${data.issueDate||''}"></div>
-          <div class="field"><label>到期日 *</label><input name="expiryDate" type="date" value="${data.expiryDate||''}" required></div>
-          <div class="field"><label>回訓日期</label><input name="retrainDate" type="date" value="${data.retrainDate||''}"></div>
+          <div class="field"><label>發證日期</label><input name="issueDate" type="date" value="${fmtDate(data.issueDate)}"></div>
+          <div class="field"><label>到期日 *</label><input name="expiryDate" type="date" value="${fmtDate(data.expiryDate)}" required></div>
+          <div class="field"><label>回訓日期</label><input name="retrainDate" type="date" value="${fmtDate(data.retrainDate)}"></div>
           <div class="field"><label>回訓年限（年）</label><input name="retrainYears" type="number" min="0" step="0.5" value="${escapeHtml(data.retrainYears||'')}"></div>
           <div class="field"><label>列管與否</label><select name="controlled"><option value="no" ${data.controlled!=='yes'?'selected':''}>不列管</option><option value="yes" ${data.controlled==='yes'?'selected':''}>列管</option></select></div>
           <div class="field full"><label>備註</label><textarea name="notes">${escapeHtml(data.notes)}</textarea></div>
@@ -1400,8 +1414,10 @@ function renderModal(){
           <div class="field full">
             <label>掃描檔附件</label>
             <input type="file" id="file-input" accept="image/*,application/pdf">
-            <div class="filehint">上限 4MB。${fileName ? '目前檔案：' + escapeHtml(fileName) : ''}</div>
-            ${fileName ? `<div><button type="button" class="btn btn-ghost btn-sm" data-action="clear-file" style="margin-top:6px;">移除檔案</button></div>` : ''}
+            <div class="filehint" id="file-hint-text">上限 4MB。${fileName ? '目前檔案：' + escapeHtml(fileName) : ''}</div>
+            <div id="clear-file-wrap" style="${fileName ? '' : 'display:none;'}margin-top:6px;">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="clear-file">移除檔案</button>
+            </div>
           </div>
         </div>
         <div class="modal-foot">
@@ -1432,7 +1448,9 @@ function attachEvents(){
 
   const notifySettingsForm = document.getElementById('notify-settings-form');
   if(notifySettingsForm) notifySettingsForm.addEventListener('submit', (e)=>{ e.preventDefault(); saveNotifySettings(e.target); });
+  
   document.querySelectorAll('[data-action="send-stage"]').forEach(el=> el.addEventListener('click', ()=> sendStageNotification(el.dataset.stage)));
+  document.querySelectorAll('[data-action="send-line"]').forEach(el=> el.addEventListener('click', ()=> sendLineNotification(pendingForStage(el.dataset.stage))));
 
   const exportBtn = document.querySelector('[data-action="export-csv"]');
   if(exportBtn) exportBtn.addEventListener('click', exportCsv);
@@ -1498,10 +1516,7 @@ function attachEvents(){
   const modalBox = document.getElementById('modal-box');
   if(overlay && modalBox){
     overlay.addEventListener('click', (e)=>{
-      // 只有當點擊的位置確實是最外層的半透明背景（overlay），且不是點在視窗內部時才關閉
-      if(e.target === overlay){
-        closeModal();
-      }
+      if(e.target === overlay){ closeModal(); }
     });
   }
   document.querySelectorAll('[data-action="close-modal"]').forEach(el=> el.addEventListener('click', closeModal));
