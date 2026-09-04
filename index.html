@@ -6,6 +6,8 @@
 <title>證照管理系統（雲端同步版）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<!-- 引入 SheetJS 用於解析 Excel 檔案 (.xlsx, .xls) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg: #EEF1F2; --surface: #FFFFFF; --surface-2: #F5F6F7; --ink: #1B2027; --muted: #5B6470;
@@ -150,7 +152,7 @@
 
 <script>
 /* ===================== 請在此填入您的 Google Apps Script 網頁應用程式 URL ===================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbwZmq8wvvW5wkwBpydDoVJaWqZyWHrwqqke7am2Wi5B66UXFcn3H7GhLi77KFwu0PC8/exec";
+const API_URL = "https://script.google.com/macros/s/您的部署ID/exec";
 /* ============================================================================================== */
 
 const CATEGORY_META = {
@@ -463,6 +465,77 @@ function clearPendingFile(){
   if(clearWrap) clearWrap.style.display = 'none';
 }
 
+/* Excel 檔案匯入處理函式 */
+async function handleExcelImport(input){
+  if(!can('edit')) return;
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: 'array'});
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const json = XLSX.utils.sheet_to_json(worksheet);
+      
+      if(!json || !json.length){
+        showToast('Excel 檔案內沒有資料');
+        input.value = '';
+        return;
+      }
+
+      let importedCount = 0;
+      json.forEach(row => {
+        const name = row['證照名稱'] || row['name'] || '';
+        const expiryDate = fmtDate(row['到期日'] || row['expiryDate'] || '');
+        if(!name || !expiryDate) return;
+
+        const record = {
+          id: uid(),
+          name: String(name).trim(),
+          category: row['類別'] === '設備證照' ? 'equip' : (row['類別'] === '環境許可' ? 'env' : (row['類別'] === '其他' ? 'other' : 'person')),
+          holder: String(row['持有人/設備'] || row['holder'] || '').trim(),
+          department: String(row['部門'] || row['department'] || '').trim(),
+          facility: String(row['所屬單位'] || row['facility'] || state.facilities[0]).trim(),
+          idNumber: String(row['身份證字號'] || row['idNumber'] || '').trim(),
+          birthday: fmtDate(row['生日'] || row['birthday'] || ''),
+          authority: String(row['發證機關'] || row['authority'] || '').trim(),
+          certNo: String(row['證照字號'] || row['certNo'] || '').trim(),
+          issueDate: fmtDate(row['issueDate'] || row['發證日期'] || ''),
+          expiryDate: expiryDate,
+          retrainDate: fmtDate(row['retrainDate'] || row['回訓日期'] || ''),
+          retrainYears: String(row['回訓年限'] || row['retrainYears'] || '').trim(),
+          controlled: (row['列管'] === '列管' || row['controlled'] === 'yes') ? 'yes' : 'no',
+          notes: String(row['備註'] || row['notes'] || '').trim(),
+          fileLocation: String(row['檔案存放位置'] || row['fileLocation'] || '').trim(),
+          notifiedStages: {},
+          fileName: '', fileType: '', fileData: ''
+        };
+
+        ensureInList(state.certNameOptions, record.name);
+        ensureInList(state.authorityOptions, record.authority);
+        if(record.department){
+          if(!state.departmentsByFacility[record.facility]) state.departmentsByFacility[record.facility] = [];
+          ensureInList(state.departmentsByFacility[record.facility], record.department);
+        }
+        state.certs.push(record);
+        importedCount++;
+      });
+
+      input.value = '';
+      render();
+      await persist();
+      showToast('成功從 Excel 匯入 ' + importedCount + ' 筆證照資料！');
+    } catch(err) {
+      console.error('解析 Excel 失敗', err);
+      showToast('解析 Excel 檔案失敗，請確認格式是否正確');
+      input.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 async function submitModal(ev){
   ev.preventDefault();
   if(!can('edit')) return;
@@ -744,10 +817,19 @@ function csvValue(c, key){
   }
 }
 
+/* 匯出 CSV 控管：一般使用者無法下載；廠區管理者僅能下載所負責廠區內的資料 */
 function exportCsv(){
+  if(state.currentRole === 'user'){
+    showToast('一般使用者無權限下載資料');
+    return;
+  }
+  let list = getFilteredCerts();
+  if(state.currentRole === 'facilityManager' && state.currentFacility){
+    list = list.filter(c => c.facility === state.currentFacility);
+  }
   const cols = visibleColumnDefs();
   const rows = [cols.map(cd=>cd.label)];
-  getFilteredCerts().forEach(c=>{ rows.push(cols.map(cd => csvValue(c, cd.key))); });
+  list.forEach(c=>{ rows.push(cols.map(cd => csvValue(c, cd.key))); });
   const csv = rows.map(r => r.map(v => '"' + String(v??'').replace(/"/g,'""') + '"').join(',')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1115,8 +1197,12 @@ function renderCertsView(){
         <div class="sub">共 ${scopedCerts().length} 筆紀錄，符合條件 ${list.length} 筆</div>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn btn-ghost" data-action="export-csv">匯出 CSV</button>
-        ${can('edit') ? `<button class="btn btn-accent" data-action="add-cert">＋ 新增證照</button>` : ''}
+        ${can('downloadFiles') ? `<button class="btn btn-ghost" data-action="export-csv">匯出 CSV</button>` : ''}
+        ${can('edit') ? `
+          <button class="btn btn-ghost" data-action="import-excel">📥 匯入 Excel</button>
+          <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display:none">
+          <button class="btn btn-accent" data-action="add-cert">＋ 新增證照</button>
+        ` : ''}
       </div>
     </div>
     <div class="filters">
@@ -1219,7 +1305,6 @@ function renderTransferView(){
   });
   const selectedCount = state.transferSelected.size;
   
-  // 取得目前選擇的新廠區對應部門清單
   const targetFacility = state.transferTarget.facility;
   const deptOptions = targetFacility ? (state.departmentsByFacility[targetFacility] || []) : [];
   const curDept = state.transferTarget.department;
@@ -1458,6 +1543,13 @@ function attachEvents(){
 
   const exportBtn = document.querySelector('[data-action="export-csv"]');
   if(exportBtn) exportBtn.addEventListener('click', exportCsv);
+
+  const importExcelBtn = document.querySelector('[data-action="import-excel"]');
+  const excelFileInput = document.getElementById('excel-file-input');
+  if(importExcelBtn && excelFileInput){
+    importExcelBtn.addEventListener('click', ()=> excelFileInput.click());
+    excelFileInput.addEventListener('change', (e)=> handleExcelImport(e.target));
+  }
 
   const fq = document.getElementById('f-q');
   if(fq){ fq.addEventListener('input', ()=> updateFilter('q', fq.value)); fq.focus(); fq.selectionStart = fq.value.length; }
