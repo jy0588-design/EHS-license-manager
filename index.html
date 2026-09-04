@@ -6,7 +6,7 @@
 <title>證照管理系統（雲端同步版）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans+TC:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-<!-- 引入 SheetJS 用於解析 Excel 檔案 (.xlsx, .xls) -->
+<!-- 引入 SheetJS 用於解析與生成 Excel 檔案 (.xlsx) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -463,6 +463,79 @@ function clearPendingFile(){
   if(fileInput) fileInput.value = '';
   const clearWrap = document.getElementById('clear-file-wrap');
   if(clearWrap) clearWrap.style.display = 'none';
+}
+
+/* 一鍵生成並下載官方 .xlsx Excel 格式的匯入範本檔案（完全防亂碼） */
+function downloadExcelTemplate(){
+  const sampleRows = [
+    {
+      "證照名稱": "甲級職業安全衛生業務主管",
+      "類別": "人員證照",
+      "持有人/設備": "王小明",
+      "所屬單位": "第一廠",
+      "部門": "製造一課",
+      "身份證字號": "A123456789",
+      "生日": "1985-05-20",
+      "發證機關": "勞動部",
+      "證照字號": "勞安字第112001號",
+      "發證日期": "2023-01-15",
+      "到期日": "2026-01-15",
+      "回訓日期": "2025-12-10",
+      "回訓年限": "2",
+      "列管": "列管",
+      "備註": "需提前安排外部回訓",
+      "檔案存放位置": "廠長室檔案櫃A"
+    },
+    {
+      "證照名稱": "第一種壓力容器操作人員",
+      "類別": "人員證照",
+      "持有人/設備": "李大同",
+      "所屬單位": "第二廠",
+      "部門": "工務課",
+      "身份證字號": "B198765432",
+      "生日": "1990-11-03",
+      "發證機關": "中華民國鍋爐協會",
+      "證照字號": "鍋協字第09876號",
+      "發證日期": "2022-06-01",
+      "到期日": "2025-06-01",
+      "回訓日期": "2025-05-15",
+      "回訓年限": "3",
+      "列管": "列管",
+      "備註": "留意回訓梯次",
+      "檔案存放位置": "工務課資料夾"
+    },
+    {
+      "證照名稱": "第一號貫流式蒸氣鍋爐",
+      "類別": "設備證照",
+      "持有人/設備": "鍋爐一號機",
+      "所屬單位": "第一廠",
+      "部門": "工務課",
+      "身份證字號": "",
+      "生日": "",
+      "發證機關": "中華民國鍋爐協會",
+      "證照字號": "檢字第2023001號",
+      "發證日期": "2023-03-01",
+      "到期日": "2025-03-01",
+      "回訓日期": "",
+      "回訓年限": "2",
+      "列管": "列管",
+      "備註": "每年定期檢驗",
+      "檔案存放位置": "現場設備銘牌旁"
+    }
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(sampleRows, {
+    header: [
+      "證照名稱", "類別", "持有人/設備", "所屬單位", "部門", 
+      "身份證字號", "生日", "發證機關", "證照字號", "發證日期", 
+      "到期日", "回訓日期", "回訓年限", "列管", "備註", "檔案存放位置"
+    ]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "證照匯入範本");
+  XLSX.writeFile(wb, "證照系統_標準匯入範本.xlsx");
+  showToast("已成功下載標準 Excel 匯入範本！");
 }
 
 /* Excel 檔案匯入處理函式 */
@@ -1196,9 +1269,10 @@ function renderCertsView(){
         <h2>證照清單</h2>
         <div class="sub">共 ${scopedCerts().length} 筆紀錄，符合條件 ${list.length} 筆</div>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
         ${can('downloadFiles') ? `<button class="btn btn-ghost" data-action="export-csv">匯出 CSV</button>` : ''}
         ${can('edit') ? `
+          <button class="btn btn-ghost" data-action="download-template">📄 下載匯入範本</button>
           <button class="btn btn-ghost" data-action="import-excel">📥 匯入 Excel</button>
           <input type="file" id="excel-file-input" accept=".xlsx, .xls, .csv" style="display:none">
           <button class="btn btn-accent" data-action="add-cert">＋ 新增證照</button>
@@ -1544,6 +1618,9 @@ function attachEvents(){
   const exportBtn = document.querySelector('[data-action="export-csv"]');
   if(exportBtn) exportBtn.addEventListener('click', exportCsv);
 
+  const downloadTmplBtn = document.querySelector('[data-action="download-template"]');
+  if(downloadTmplBtn) downloadTmplBtn.addEventListener('click', downloadExcelTemplate);
+
   const importExcelBtn = document.querySelector('[data-action="import-excel"]');
   const excelFileInput = document.getElementById('excel-file-input');
   if(importExcelBtn && excelFileInput){
@@ -1614,7 +1691,7 @@ function attachEvents(){
   if(tFacility){
     tFacility.addEventListener('change', ()=> {
       state.transferTarget.facility = tFacility.value;
-      state.transferTarget.department = ''; // 變更廠區時清空原部門選擇
+      state.transferTarget.department = '';
       render();
     });
   }
@@ -1663,7 +1740,6 @@ function attachEvents(){
       select.addEventListener('change', sync);
     });
     
-    // 新增證照視窗內：切換廠區時連動部門下拉選單
     const facilitySelect = form.elements['facility'];
     const deptSelect = form.elements['department'];
     if(facilitySelect && deptSelect){
